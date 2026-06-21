@@ -25,7 +25,7 @@ from .core.package import APP_VERSION
 __version__ = APP_VERSION
 
 
-async def main() -> None:
+def main() -> None:
   args = parse_arguments()
   settings: Settings = get_settings()
 
@@ -61,3 +61,7 @@ async def _status(settings: Settings) -> None:
       print(response.text)
   except httpx.HTTPError as exc:
     raise SystemExit(f"Oremi Akọrin is unavailable: {exc}") from exc
+
+
+if __name__ == "__main__":
+  main()

@@ -35,9 +35,9 @@ ENV PYTHONUNBUFFERED="1"
 ENV LOG_LEVEL="INFO"
 ENV LOG_FILE=
 ENV OLLAMA_HOST="http://ollama:11434"
+ENV SERVER_HOST="0.0.0.0"
 
 EXPOSE 5020
 
 WORKDIR /opt/oremi
 ENTRYPOINT ["/opt/oremi/bin/entrypoint.sh"]
-CMD ["start", "--host", "0.0.0.0", "--port", "5020"]

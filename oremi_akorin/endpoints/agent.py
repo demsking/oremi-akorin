@@ -25,43 +25,134 @@ from ..core.models import ProcessResponse
 def create_agent_endpoints(api: FastAPI) -> None:
   tag = {
     "name": "Agent Processing",
-    "description": "Endpoints for natural language processing and agent-based interactions. "
-    "These endpoints handle text analysis, language detection, "
-    "and orchestration of various services (Ollama, weather, radio, etc.).",
+    "description": (
+      "Process English or French natural-language requests and route them to "
+      "Ollama, built-in tools, knowledge sources, or configured Oremi services."
+    ),
   }
 
   api.openapi_tags.append(tag)  # type: ignore
 
   @api.post(
     path="/api/process",
+    summary="Process a natural-language request",
     tags=[tag["name"]],
+    response_model=ProcessResponse,
     status_code=status.HTTP_200_OK,
     responses={
       200: {
-        "description": "Successfully processed the request",
+        "description": (
+          "The request was processed. Inspect `ok` to distinguish a successful result "
+          "from an expected service or input failure."
+        ),
         "content": {
           "application/json": {
-            "example": ProcessResponse.model_validate(
-              {
-                "ok": True,
-                "input": "What's the weather like in Lagos?",
-                "language": "en",
-                "service": "weather",
-                "message": "The weather in Lagos is currently 28°C with scattered clouds.",
-                "data": {"temperature": 28, "conditions": "scattered clouds", "humidity": 72, "city": "Lagos"},
-                "confidence": 0.95,
-              }
-            )
+            "examples": {
+              "weather": {
+                "summary": "Weather result",
+                "value": {
+                  "ok": True,
+                  "input": "What's the weather like in Lagos?",
+                  "language": "en",
+                  "service": "weather",
+                  "message": (
+                    "It's quite warm in Lagos with temperatures around 26°C. Humidity is at 82%, so it feels a bit sticky."
+                    "With winds blowing at about 12 km/h from the northeast, and considering the sunset will be at 6 PM today, "
+                    "that might make for some pleasant evenings. Take a hat and maybe an umbrella if rain is in the forecast."
+                  ),
+                  "data": {
+                    "provider": "Open-Météo",
+                    "input": "What's the weather like in Lagos?",
+                    "services": ["weather"],
+                    "message": (
+                      "It's quite warm in Lagos with temperatures around 26°C."
+                      "Humidity is at 82%, so it feels a bit sticky. With winds blowing at about 12 km/h from the northeast, "
+                      "and considering the sunset will be at 6 PM today, that might make for some pleasant evenings. Take a "
+                      "hat and maybe an umbrella if rain is in the forecast."
+                    ),
+                    "data": {
+                      "weather": {
+                        "temperature": "26.4°C",
+                        "humidity": "82%",
+                        "wind_speed": "12.3 km/h",
+                        "sunrise": "05:33:00",
+                        "sunset": "18:03:00",
+                      }
+                    },
+                    "location": {
+                      "type": "city",
+                      "name": "Lagos",
+                      "boundingbox": [6.2950575, 6.6150575, 3.2341795, 3.5541795],
+                      "lat": 6.4550575,
+                      "lon": 3.3941795,
+                      "addresstype": "city",
+                      "display_name": "Lagos, Lagos Island, Lagos State, 100242, Nigeria",
+                      "address": {
+                        "country": "Nigeria",
+                        "country_code": "ng",
+                        "region": None,
+                        "postcode": "100242",
+                        "road": None,
+                        "town": None,
+                        "municipality": None,
+                        "county": "Lagos Island",
+                        "state": "Lagos State",
+                        "city": "Lagos",
+                      },
+                    },
+                  },
+                  "confidence": 0.95,
+                },
+              },
+              "tool": {
+                "summary": "Built-in tool result",
+                "value": {
+                  "ok": True,
+                  "input": "What is 18 * 4?",
+                  "language": "en",
+                  "service": "tool",
+                  "message": "18 multiplied by 4 is 72.",
+                  "data": {"tools": [{"name": "calculate", "expression": "18 * 4", "result": 72}]},
+                  "confidence": 1.0,
+                },
+              },
+              "more_information_required": {
+                "summary": "Expected input failure",
+                "value": {
+                  "ok": False,
+                  "input": "Set an alarm for tomorrow morning",
+                  "language": "en",
+                  "service": "isinmi",
+                  "message": "Please specify your timezone so I can schedule this at the correct time.",
+                  "data": {"error": {"type": "more_information_required"}},
+                  "confidence": 0.98,
+                },
+              },
+            }
           }
         },
       },
-      400: {
-        "description": "Bad request - invalid payload",
-        "content": {"application/json": {"example": {"detail": "Text must be between 1 and 8000 characters"}}},
+      422: {
+        "description": "The JSON body does not match the request schema.",
+        "content": {
+          "application/json": {
+            "example": {
+              "detail": [
+                {
+                  "type": "string_too_short",
+                  "loc": ["body", "text"],
+                  "msg": "String should have at least 1 character",
+                  "input": "",
+                  "ctx": {"min_length": 1},
+                }
+              ]
+            }
+          }
+        },
       },
       500: {
-        "description": "Internal server error - processing failed",
-        "content": {"application/json": {"example": {"detail": "Failed to process request: Ollama service unavailable"}}},
+        "description": "An unexpected processing error occurred.",
+        "content": {"application/json": {"example": {"detail": "Internal Server Error"}}},
       },
     },
   )
@@ -70,57 +161,71 @@ def create_agent_endpoints(api: FastAPI) -> None:
     payload: ProcessRequest = Body(
       ...,
       description=(
-        "Natural language processing request payload. Contains the text to process "
-        "along with optional language, context, and tags."
+        "The user's text plus optional language, service context, and caller-defined tags. "
+        "Context requirements depend on the selected service."
       ),
-      examples=[
-        {
-          "summary": "Weather query",
-          "description": "Request for weather information",
+      openapi_examples={
+        "weather": {
+          "summary": "Weather forecast",
+          "description": "Timezone and temperature unit are forwarded to the weather service.",
           "value": {
             "text": "What's the weather like in Lagos?",
             "language": "en",
+            "context": {"timezone": "Africa/Lagos", "temperature_unit": "celsius"},
           },
         },
-        {
-          "summary": "Radio recommendation",
-          "description": "Request for radio station recommendations",
+        "reminder": {
+          "summary": "Schedule a reminder",
+          "description": "Isinmi requires an IANA timezone to resolve relative dates correctly.",
           "value": {
-            "text": "Play me some Afrobeat music",
+            "text": "Remind me to call Ada tomorrow at 9 AM",
             "language": "en",
-            "tags": {"category": "music", "genre": "afrobeat"},
+            "context": {"timezone": "Europe/Paris"},
+            "tags": {"user": "ada"},
           },
         },
-        {
-          "summary": "General knowledge query",
-          "description": "Request for general information",
+        "weather_alert": {
+          "summary": "Check local weather alerts",
+          "description": "Alerts require a category and geographic coordinates.",
           "value": {
-            "text": "Who is the president of Nigeria?",
-            "language": "en",
-            "context": {"topic": "politics"},
+            "text": "Are there weather alerts near me?",
+            "context": {
+              "alert_service": "weather",
+              "lat": 48.8566,
+              "lon": 2.3522,
+              "timezone": "Europe/Paris",
+            },
           },
         },
-        {
-          "summary": "Conversational chat",
-          "description": "Simple conversational input",
+        "zigbee": {
+          "summary": "Control a Zigbee device",
+          "description": "Device and state can be inferred from text or supplied explicitly in context.",
           "value": {
-            "text": "Hello, how are you?",
+            "text": "Turn off the bedroom lamp",
             "language": "en",
+            "context": {"device": "bedroom_lamp", "state": "OFF"},
           },
         },
-      ],
+      },
     ),
   ) -> ProcessResponse:
-    """
-    Process natural language input through the agent orchestrator.
+    """Process and route a natural-language request.
 
-    This endpoint accepts text input and routes it through the appropriate
-    service based on intent detection. Supports:
-    - Weather queries (via Isinmi or Weather services)
-    - Radio station recommendations
-    - Podcast recommendations
-    - General knowledge queries (via Ollama/LLM)
-    - Search fallback (DuckDuckGo)
+    The endpoint normalizes the input, detects its language when `language` is
+    omitted, and routes the request to the best available capability:
+
+    - conversational answers and native date/time, calculator, or conversion tools;
+    - Wikipedia for stable knowledge and DuckDuckGo for current information;
+    - configured scheduling, weather, radio, podcast, or Zigbee services.
+
+    `context` carries structured data needed by a service, such as an IANA
+    timezone, coordinates, temperature unit, or device state. `tags` contains
+    caller-defined string metadata and is forwarded where supported.
+
+    A valid request normally returns HTTP 200 even when a selected service needs
+    more information or is temporarily unavailable. In that case, `ok` is false,
+    `message` is safe to show to the user, and `data.error.type` identifies the
+    failure. Schema validation failures return HTTP 422.
     """
     context: AppContext = request.app.state.context
 

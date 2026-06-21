@@ -62,6 +62,26 @@ async def test_validation_rejects_blank_input():
   assert response.status_code == 422
 
 
+def test_process_openapi_documentation_describes_contract():
+  app = create_app(isolated_settings())
+  operation = app.openapi()["paths"]["/api/process"]["post"]
+
+  assert operation["summary"] == "Process a natural-language request"
+  assert "HTTP 200" in operation["description"]
+  assert set(operation["requestBody"]["content"]["application/json"]["examples"]) == {
+    "weather",
+    "reminder",
+    "weather_alert",
+    "zigbee",
+  }
+  assert set(operation["responses"]) == {"200", "422", "500"}
+  assert set(operation["responses"]["200"]["content"]["application/json"]["examples"]) == {
+    "weather",
+    "tool",
+    "more_information_required",
+  }
+
+
 @pytest.mark.asyncio
 async def test_startup_and_shutdown_emit_operational_logs(caplog):
   service_client = httpx.AsyncClient(transport=httpx.MockTransport(ollama_handler))

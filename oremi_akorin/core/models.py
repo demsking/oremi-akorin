@@ -31,7 +31,14 @@ class ProcessRequest(BaseModel):
     min_length=1,
     max_length=8000,
     description="Input text to be processed by the NLP system. Must be between 1 and 8000 characters.",
+    examples=[
+      "What's the weather like in Lagos?",
+      "Play me some Afrobeat music",
+      "Who is the president of Nigeria?",
+      "Hello, how are you?",
+    ],
   )
+
   language: Language | None = Field(
     default=None, description="Optional language code for the input text. If not provided, will be auto-detected."
   )
