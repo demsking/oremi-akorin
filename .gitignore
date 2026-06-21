@@ -1,0 +1,13 @@
+.venv/
+.devbox/
+.trunk/
+htmlcov/
+dist/
+__pycache__/
+.ruff_cache/
+.nix-node/
+.directory
+.coverage
+*.tflite
+.direnv/
+build/

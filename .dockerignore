@@ -1,0 +1,7 @@
+.git/
+.gitlab/
+__pycache__/
+.directory
+.dockerignore
+dockerfile
+docker-compose.yaml

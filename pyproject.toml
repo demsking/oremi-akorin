@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "oremi-akorin"
+version = "1.0.0b3"
+description = "The Oremi NLP orchestration service for the Oremi ecosystem"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Apache-2.0" }
+authors = [
+  { name = "Sébastien Demanou", email = "demsking@gmail.com" }
+]
+keywords = ["oremi"]
+
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Natural Language :: English",
+  "Natural Language :: French",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+  "fastapi[standard]>=0.115.0,<1.0.0",
+  "uvicorn>=0.34.0,<1.0.0",
+  "paho-mqtt>=2.1.0,<3.0.0",
+  "pydantic>=2.10.0,<3.0.0",
+  "httpx>=0.28.1",
+  "pydantic-settings>=2.14.2",
+]
+
+[project.urls]
+"Say Thanks!" = "https://www.buymeacoffee.com/demsking"
+"Source" = "https://gitlab.com/demsking/oremi-akorin"
+"Tracker" = "https://gitlab.com/demsking/oremi-akorin/-/issues"
+"Documentation" = "https://gitlab.com/demsking/oremi-akorin/-/blob/main/README.md"
+
+[project.scripts]
+oremi-akorin = "oremi_akorin:main"
+
+[dependency-groups]
+dev = [
+  "aiohttp>=3.9.0",
+  "autopep8>=2.3.2",
+  "bandit>=1.8.3",
+  "classify-imports>=4.2.0",
+  "pylint>=3.3.7",
+  "pyroma>=4.2",
+  "pytest>=8.3.5",
+  "pytest-asyncio>=0.26.0",
+  "pytest-cov>=6.1.1",
+  "python-dotenv>=1.1.0",
+  "python-slugify>=8.0.4",
+  "reorder-python-imports>=3.14.0",
+  "ruff>=0.12.0",
+  "sounddevice>=0.5.5",
+  "twine>=6.2.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["oremi_akorin"]
+
+[tool.hatch.build]
+ignore-vcs = true
+
+[tool.pytest.ini_options]
+# Function starting with the following pattern are considered for test cases.
+python_functions = "test_"

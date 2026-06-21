@@ -1,0 +1,41 @@
+# You can override the included template(s) by including variable overrides
+# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
+# Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/pipeline/#customization
+# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
+# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
+# Note that environment variables can be set in several places
+# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+image: alpine
+
+stages:
+  - test
+  - deploy
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+sast:
+  stage: test
+
+include:
+  - template: Security/SAST.gitlab-ci.yml
+
+pages:
+  stage: deploy
+  image: python:alpine
+  before_script:
+    - apk add --no-cache zip
+  script:
+    - mkdir -p public
+    - mkdir -p /tmp/oremi_akorin
+    - cp -r integrations/home-assistant/oremi_akorin/* /tmp/oremi_akorin/
+    - cd /tmp && zip -r oremi-akorin-homeassistant.zip oremi_akorin && cd -
+    - cp /tmp/oremi-akorin-homeassistant.zip public/
+    - cp -r doc/* public/
+    - ls -lah public/
+    - echo "The documentation site will be deployed to $CI_PAGES_URL"
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
