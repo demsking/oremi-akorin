@@ -22,8 +22,9 @@ from ..utils.http_retry import request_with_retry
 
 
 class SearchService:
-  def __init__(self, client: httpx.AsyncClient) -> None:
+  def __init__(self, client: httpx.AsyncClient, timeout: float = 10.0) -> None:
     self.client = client
+    self.timeout = timeout
 
   async def process(self, text: str, language: str, context: dict[str, Any], tags: dict[str, str]) -> tuple[str, Any]:
     try:
@@ -31,6 +32,7 @@ class SearchService:
         lambda: self.client.get(
           "https://api.duckduckgo.com/",
           params={"q": text, "format": "json", "no_html": 1, "skip_disambig": 1},
+          timeout=self.timeout,
         ),
         Service.SEARCH.value,
       )
@@ -42,13 +44,40 @@ class SearchService:
       raise ComponentUnavailable(Service.SEARCH, str(exc)) from exc
 
     answer = data.get("Answer") or data.get("AbstractText")
+    source_url = data.get("AbstractURL")
+    source_name = data.get("AbstractSource") or "DuckDuckGo"
 
     if not answer:
       topics = data.get("RelatedTopics") or []
-      first = next((item.get("Text") for item in topics if isinstance(item, dict) and item.get("Text")), None)
-      answer = first
+      results = list(self._topic_results(topics))
+      first = results[0] if results else None
+      answer = first.get("text") if first else None
+      source_url = first.get("url") if first else None
+    else:
+      results = list(self._topic_results(data.get("RelatedTopics") or []))
 
     if not answer:
       answer = "No direct result was found." if language == "en" else "Aucun résultat direct n'a été trouvé."
 
-    return answer, data
+    result = {
+      "source": source_name,
+      "url": source_url,
+      "heading": data.get("Heading") or None,
+      "results": results[:5],
+    }
+
+    return str(answer).strip(), result
+
+  @classmethod
+  def _topic_results(cls, topics: list[Any]):
+    for item in topics:
+      if not isinstance(item, dict):
+        continue
+
+      if item.get("Text"):
+        yield {"text": str(item["Text"]).strip(), "url": item.get("FirstURL")}
+
+      nested = item.get("Topics")
+
+      if isinstance(nested, list):
+        yield from cls._topic_results(nested)

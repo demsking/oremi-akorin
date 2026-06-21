@@ -143,7 +143,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     component_names = [service.value for service in components]
     logger.info(
       f"Services configured: external={component_names or ['none']} "
-      f"wikipedia=enabled search_configured={settings.search_enabled} "
+      f"wikipedia=enabled search={'enabled' if settings.search_enabled else 'disabled'} "
       f"zigbee={'enabled' if settings.is_mqtt_enabled else 'disabled'}"
     )
 
@@ -153,15 +153,16 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       name_translator=lambda name: ollama.translate(name, "auto-detected language", Language.EN.value),
     )
 
-    orchestrator = Orchestrator(
-      ollama,
-      {
-        **components,
-        Service.WIKIPEDIA: WikipediaService(client),
-        Service.SEARCH: SearchService(client),
-        Service.ZIGBEE: zigbee,
-      },
-    )
+    handlers = {
+      **components,
+      Service.WIKIPEDIA: WikipediaService(client),
+      Service.ZIGBEE: zigbee,
+    }
+
+    if settings.search_enabled:
+      handlers[Service.SEARCH] = SearchService(client, timeout=settings.search_timeout)
+
+    orchestrator = Orchestrator(ollama, handlers)
 
     app.state.client = client
     app.state.context = AppContext(
