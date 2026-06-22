@@ -34,7 +34,6 @@ from ..llm.ollama import OllamaClient
 from ..services.orchestrator import Orchestrator
 from ..services.search import SearchService
 from ..services.wikipedia import WikipediaService
-from .config import Settings
 from .constants import Language
 from .constants import Service
 from .context import AppContext
@@ -42,6 +41,7 @@ from .logger import logger
 from .mqtt import MQTTService
 from .package import APP_DESCRIPTION
 from .package import APP_VERSION
+from .settings import Settings
 
 
 def _safe_endpoint(value: object | None) -> str:
@@ -82,8 +82,7 @@ def log_startup_settings(config: Settings) -> None:
   )
 
   logger.info(
-    f"App settings [mqtt topics]: request={config.mqtt_request_topic} response={config.mqtt_response_topic} "
-    f"state={config.mqtt_state_topic}"
+    f"App settings [mqtt topics]: device_base={config.oremi_device_mqtt_topic} transcription={config.mqtt_transcription_topic}"
   )
 
   logger.info(f"App settings [search]: enabled={config.search_enabled} timeout={config.search_timeout:.1f}s")

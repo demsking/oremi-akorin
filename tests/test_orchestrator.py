@@ -55,6 +55,15 @@ class FakeComponent:
     return "Sunny", {"temperature": 22}
 
 
+class FakeResultComponent:
+  def __init__(self, message, data):
+    self.message = message
+    self.data = data
+
+  async def process(self, text, language, context, tags):
+    return self.message, self.data
+
+
 class FakeIncompleteRequestComponent:
   async def process(self, text, language, context, tags):
     raise ComponentRequestError(
@@ -122,6 +131,100 @@ async def test_process_uses_router_fallback_and_component():
 
 
 @pytest.mark.asyncio
+async def test_rediyo_result_selects_speak_then_play_commands():
+  component = FakeResultComponent(
+    "Here is France Culture.",
+    {"station": {"name": "France Culture", "url": "https://radio.example/live.mp3"}},
+  )
+  orchestrator = Orchestrator(FakeOllama(), {Service.REDIYO: component})
+
+  result = await orchestrator.process(ProcessRequest(text="Play France Culture radio", language="en"))
+
+  assert [command.model_dump(mode="json", exclude_none=True) for command in result.commands] == [
+    {"type": "speak", "text": "Here is France Culture."},
+    {"type": "play", "url": "https://radio.example/live.mp3"},
+  ]
+
+
+@pytest.mark.asyncio
+async def test_isinmi_result_selects_speak_then_reminder_commands():
+  component = FakeResultComponent(
+    "Reminder created.",
+    {
+      "ok": True,
+      "action": "create",
+      "id": "medicine",
+      "type": "reminder",
+      "data": {
+        "type": "reminder",
+        "label": "Take your medicine",
+        "time": "2026-06-23T18:30:00+02:00",
+      },
+    },
+  )
+  orchestrator = Orchestrator(FakeOllama(), {Service.ISINMI: component})
+
+  result = await orchestrator.process(
+    ProcessRequest(
+      text="Remind me to take my medicine tomorrow",
+      language="en",
+      context={"timezone": "Europe/Paris"},
+    )
+  )
+
+  assert [command.model_dump(mode="json", exclude_none=True) for command in result.commands] == [
+    {"type": "speak", "text": "Reminder created."},
+    {
+      "type": "reminder",
+      "id": "medicine",
+      "at": "2026-06-23T18:30:00+02:00",
+      "message": "Take your medicine",
+    },
+  ]
+
+
+@pytest.mark.asyncio
+async def test_incomplete_media_result_falls_back_to_automatic_message_speech():
+  component = FakeResultComponent("No playable station found.", {"station": {"name": "Unknown"}})
+  orchestrator = Orchestrator(FakeOllama(), {Service.REDIYO: component})
+
+  result = await orchestrator.process(ProcessRequest(text="Play an unknown station", language="en"))
+
+  assert result.commands == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+  ("text", "language", "command"),
+  [
+    ("pause the radio", "en", {"type": "pause"}),
+    ("reprends la lecture", "fr", {"type": "resume"}),
+    ("set volume to 60%", "en", {"type": "set_volume", "volume": 60}),
+    ("coupe le son", "fr", {"type": "mute", "muted": True}),
+    ("unmute", "en", {"type": "mute", "muted": False}),
+    ("use the voice Ada", "en", {"type": "set_voice", "voice": "Ada"}),
+  ],
+)
+async def test_direct_device_controls_bypass_conversational_processing(text, language, command):
+  orchestrator = Orchestrator(FakeOllama(), {})
+
+  result = await orchestrator.process(ProcessRequest(text=text, language=language))
+
+  assert result.service == Service.DEVICE
+  assert result.commands[0].model_dump(mode="json", exclude_none=True) == command
+
+
+@pytest.mark.asyncio
+async def test_invalid_direct_device_control_is_not_emitted():
+  orchestrator = Orchestrator(FakeOllama(), {})
+
+  result = await orchestrator.process(ProcessRequest(text="set volume to 101", language="en"))
+
+  assert result.service == Service.CHAT
+  assert result.commands == []
+
+
+@pytest.mark.asyncio
 async def test_processing_emits_correlated_debug_information(caplog):
   orchestrator = Orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent()})
 
@@ -136,9 +239,7 @@ async def test_processing_emits_correlated_debug_information(caplog):
 
   messages = [record.getMessage() for record in caplog.records]
   assert any(
-    "Processing started:" in message
-    and "context_keys=['timezone']" in message
-    and "input_text='Weather in London'" in message
+    "Processing started:" in message and "context_keys=['timezone']" in message and "input_text='Weather in London'" in message
     for message in messages
   )
   assert any(

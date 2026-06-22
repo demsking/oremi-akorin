@@ -21,6 +21,7 @@ class Language(StrEnum):
 
 
 class Service(StrEnum):
+  DEVICE = "device"
   ISINMI = "isinmi"
   WEATHER = "weather"
   WEATHER_ALERTS = "weather_alerts"

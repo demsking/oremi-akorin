@@ -3,9 +3,15 @@ import logging
 
 import paho.mqtt.client as mqtt
 import pytest
+from pydantic import ValidationError
 
-from oremi_akorin.core.config import Settings
+from oremi_akorin.core.settings import Settings
+from oremi_akorin.core.constants import Language
+from oremi_akorin.core.constants import Service
 from oremi_akorin.core.mqtt import MQTTService
+from oremi_akorin.core.models import PlayCommand
+from oremi_akorin.core.models import ProcessResponse
+from oremi_akorin.core.models import SpeakCommand
 
 
 async def processor(request):
@@ -52,6 +58,19 @@ def test_mqtt_broker_scheme_is_removed_for_paho():
   assert settings.mqtt_broker == "broker.test"
 
 
+def test_oremi_device_topics_are_derived_from_normalized_base():
+  settings = Settings(OLLAMA_PULL_MODEL=False, OREMI_DEVICE_MQTT_TOPIC=" /house/oremi/ ")
+
+  assert settings.oremi_device_mqtt_topic == "house/oremi"
+  assert settings.mqtt_transcription_topic == "house/oremi/nodes/+/transcription/result"
+  assert settings.mqtt_processing_result_topic("kitchen") == "house/oremi/nodes/kitchen/processing/result"
+
+
+def test_oremi_device_base_topic_rejects_wildcards():
+  with pytest.raises(ValidationError, match="without wildcards"):
+    Settings(OLLAMA_PULL_MODEL=False, OREMI_DEVICE_MQTT_TOPIC="oremi/+/device")
+
+
 def test_subscribe_and_unsubscribe_are_logged(caplog):
   settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
   service = MQTTService(settings, processor)
@@ -62,9 +81,7 @@ def test_subscribe_and_unsubscribe_are_logged(caplog):
 
   messages = [record.getMessage() for record in caplog.records]
   assert "MQTT handler subscribed: topic=zigbee/devices broker_subscription=deferred" in messages
-  assert (
-    "MQTT handler unsubscribed: topic=zigbee/devices handler_registered=True broker_subscription=inactive" in messages
-  )
+  assert "MQTT handler unsubscribed: topic=zigbee/devices handler_registered=True broker_subscription=inactive" in messages
 
 
 def test_mqtt_handler_traceback_is_only_attached_in_debug(caplog):
@@ -113,3 +130,78 @@ async def test_mqtt_schedules_async_message_handlers():
   service._on_message(service.client, None, Message())  # type: ignore[arg-type]
 
   await asyncio.wait_for(handled.wait(), timeout=1)
+
+
+@pytest.mark.asyncio
+async def test_processes_final_transcription_and_replies_to_same_node(monkeypatch):
+  requests = []
+
+  async def process(request):
+    requests.append(request)
+    return ProcessResponse(
+      input=request.text,
+      language=Language.EN,
+      service=Service.CHAT,
+      message="The light is on",
+      confidence=1,
+    )
+
+  settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
+  service = MQTTService(settings, process)
+  published = []
+  monkeypatch.setattr(service.client, "publish", lambda *args, **kwargs: published.append((args, kwargs)))
+
+  await service._process(
+    "oremi/device/nodes/living-room/transcription/result",
+    b'{"text":"turn on the light"}',
+  )
+
+  assert requests[0].text == "turn on the light"
+  assert published == [(("oremi/device/nodes/living-room/processing/result", '{"message": "The light is on"}'), {"qos": 1})]
+
+
+@pytest.mark.asyncio
+async def test_invalid_transcription_returns_device_compatible_error(monkeypatch):
+  settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
+  service = MQTTService(settings, processor)
+  published = []
+  monkeypatch.setattr(service.client, "publish", lambda *args, **kwargs: published.append((args, kwargs)))
+
+  await service._process("oremi/device/nodes/bedroom/transcription/result", b'{"partial":"hello"}')
+
+  topic, output = published[0][0]
+  assert topic == "oremi/device/nodes/bedroom/processing/result"
+  assert "message" in __import__("json").loads(output)
+  assert published[0][1] == {"qos": 1}
+
+
+@pytest.mark.asyncio
+async def test_device_commands_are_forwarded_in_order(monkeypatch):
+  async def process(request):
+    return ProcessResponse(
+      input=request.text,
+      language=Language.EN,
+      service=Service.REDIYO,
+      message="Playing the radio",
+      confidence=1,
+      commands=[
+        SpeakCommand(text="Playing your station"),
+        PlayCommand(url="https://radio.example/live.mp3"),
+      ],
+    )
+
+  settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
+  service = MQTTService(settings, process)
+  published = []
+  monkeypatch.setattr(service.client, "publish", lambda *args, **kwargs: published.append((args, kwargs)))
+
+  await service._process("oremi/device/nodes/kitchen/transcription/result", b'{"text":"play the radio"}')
+
+  output = __import__("json").loads(published[0][0][1])
+  assert output == {
+    "message": "Playing the radio",
+    "commands": [
+      {"type": "speak", "text": "Playing your station"},
+      {"type": "play", "url": "https://radio.example/live.mp3"},
+    ],
+  }

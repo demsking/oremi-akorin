@@ -12,8 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from typing import Annotated
 from typing import Any
+from typing import Literal
 
+from pydantic import AnyHttpUrl
+from pydantic import AwareDatetime
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -51,6 +55,95 @@ class ProcessRequest(BaseModel):
   )
 
 
+class DeviceCommand(BaseModel):
+  """Base model for commands understood by Oremi Device."""
+
+  model_config = ConfigDict(extra="forbid")
+
+
+class SpeakCommand(DeviceCommand):
+  type: Literal["speak"] = "speak"
+  text: str = Field(min_length=1)
+  voice: str | None = None
+
+
+class AnnounceCommand(DeviceCommand):
+  type: Literal["announce"] = "announce"
+  text: str = Field(min_length=1)
+  voice: str | None = None
+
+
+class PlayCommand(DeviceCommand):
+  type: Literal["play"] = "play"
+  url: AnyHttpUrl
+
+
+class PauseCommand(DeviceCommand):
+  type: Literal["pause"] = "pause"
+
+
+class ResumeCommand(DeviceCommand):
+  type: Literal["resume"] = "resume"
+
+
+class StopCommand(DeviceCommand):
+  type: Literal["stop"] = "stop"
+
+
+class AlarmCommand(DeviceCommand):
+  type: Literal["alarm"] = "alarm"
+  id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")  # pylint: disable=invalid-name
+  at: AwareDatetime  # pylint: disable=invalid-name
+  message: str | None = None
+  url: AnyHttpUrl | None = None
+  voice: str | None = None
+
+
+class ReminderCommand(DeviceCommand):
+  type: Literal["reminder"] = "reminder"
+  id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")  # pylint: disable=invalid-name
+  at: AwareDatetime  # pylint: disable=invalid-name
+  message: str = Field(min_length=1)
+  voice: str | None = None
+
+
+class CancelScheduledCommand(DeviceCommand):
+  type: Literal["cancel_scheduled"] = "cancel_scheduled"
+  id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")  # pylint: disable=invalid-name
+
+
+class SetVolumeCommand(DeviceCommand):
+  type: Literal["set_volume"] = "set_volume"
+  volume: int = Field(ge=0, le=100)
+
+
+class MuteCommand(DeviceCommand):
+  type: Literal["mute"] = "mute"
+  muted: bool
+
+
+class SetVoiceCommand(DeviceCommand):
+  type: Literal["set_voice"] = "set_voice"
+  voice: str = Field(min_length=1)
+
+
+OremiDeviceCommand = Annotated[
+  SpeakCommand
+  | AnnounceCommand
+  | PlayCommand
+  | PauseCommand
+  | ResumeCommand
+  | StopCommand
+  | AlarmCommand
+  | ReminderCommand
+  | CancelScheduledCommand
+  | SetVolumeCommand
+  | MuteCommand
+  | SetVoiceCommand,
+  Field(discriminator="type"),
+]
+
+
 class ProcessResponse(BaseModel):
   """Response model for NLP processing results."""
 
@@ -65,6 +158,10 @@ class ProcessResponse(BaseModel):
   )
   confidence: float = Field(
     ge=0, le=1, description="Confidence score for the response, ranging from 0.0 (lowest) to 1.0 (highest)."
+  )
+  commands: list[OremiDeviceCommand] = Field(
+    default_factory=list,
+    description="Ordered commands selected by Akọrin for the requesting Oremi Device node.",
   )
 
 

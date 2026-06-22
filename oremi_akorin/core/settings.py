@@ -154,22 +154,10 @@ class Settings(BaseSettings):
     description="MQTT broker password. Optional - only needed if authentication is required.",
   )
 
-  mqtt_request_topic: str = Field(
-    default="oremi/akorin/request",
-    alias="MQTT_REQUEST_TOPIC",
-    description="MQTT topic to subscribe for NLP processing requests.",
-  )
-
-  mqtt_response_topic: str = Field(
-    default="oremi/akorin/response",
-    alias="MQTT_RESPONSE_TOPIC",
-    description="MQTT topic to publish NLP processing responses.",
-  )
-
-  mqtt_state_topic: str = Field(
-    default="oremi/akorin/state",
-    alias="MQTT_STATE_TOPIC",
-    description="MQTT topic to publish processing state updates.",
+  oremi_device_mqtt_topic: str = Field(
+    default="oremi/device",
+    alias="OREMI_DEVICE_MQTT_TOPIC",
+    description="Base topic used by Oremi Device nodes.",
   )
 
   mqtt_keepalive: int = Field(
@@ -271,6 +259,27 @@ class Settings(BaseSettings):
         raise ValueError("MQTT_BROKER must contain only a hostname or IP address")
 
     return value
+
+  @field_validator("oremi_device_mqtt_topic", mode="before")
+  @classmethod
+  def validate_oremi_device_mqtt_topic(cls, value):  # pylint: disable=invalid-name
+    """Normalize the Oremi Device base topic and reject MQTT wildcards."""
+    if isinstance(value, str):
+      value = value.strip().strip("/")
+
+    if not value or "+" in value or "#" in value:
+      raise ValueError("OREMI_DEVICE_MQTT_TOPIC must be a non-empty topic without wildcards")
+
+    return value
+
+  @property
+  def mqtt_transcription_topic(self) -> str:
+    """Topic filter for final transcriptions from every Oremi Device node."""
+    return f"{self.oremi_device_mqtt_topic}/nodes/+/transcription/result"
+
+  def mqtt_processing_result_topic(self, node_id: str) -> str:
+    """Response topic for a specific Oremi Device node."""
+    return f"{self.oremi_device_mqtt_topic}/nodes/{node_id}/processing/result"
 
   @field_validator("isinmi_url", "weather_url", "rediyo_url", "kansa_url")
   @classmethod

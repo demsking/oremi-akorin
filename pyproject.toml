@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "oremi-akorin"
-version = "1.0.0b3"
+version = "1.0.0b1"
 description = "The Oremi NLP orchestration service for the Oremi ecosystem"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -39,7 +39,7 @@ dependencies = [
 "Documentation" = "https://gitlab.com/demsking/oremi-akorin/-/blob/main/README.md"
 
 [project.scripts]
-oremi-akorin = "oremi_akorin:main"
+oremi-akorin = "oremi_akorin.__main__:main"
 
 [dependency-groups]
 dev = [

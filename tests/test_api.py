@@ -4,7 +4,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from oremi_akorin.core.config import Settings
+from oremi_akorin.core.settings import Settings
 from oremi_akorin.core.app import create_app
 from oremi_akorin.core.app import log_startup_settings
 

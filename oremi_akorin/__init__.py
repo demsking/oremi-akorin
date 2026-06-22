@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 from .core.app import create_app
-from .core.config import get_settings
+from .core.settings import get_settings
 
 settings = get_settings()
 app = create_app(settings)

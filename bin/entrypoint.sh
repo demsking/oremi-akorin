@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copyright 2024 Sébastien Demanou. All Rights Reserved.
+# Copyright 2026 Sébastien Demanou. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,4 +15,4 @@
 # ==============================================================================
 set -e
 
-oremi-akorin "$@"
+exec python -m oremi_akorin "$@"

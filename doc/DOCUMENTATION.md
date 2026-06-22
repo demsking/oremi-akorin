@@ -154,9 +154,7 @@ MQTT is disabled when `MQTT_BROKER` is unset.
 | `MQTT_CLIENT_ID`      | Generated               | MQTT client identifier.                                                    |
 | `MQTT_USERNAME`       | None                    | Optional broker username.                                                  |
 | `MQTT_PASSWORD`       | None                    | Optional broker password.                                                  |
-| `MQTT_REQUEST_TOPIC`  | `oremi/akorin/request`  | Incoming NLP requests.                                                     |
-| `MQTT_RESPONSE_TOPIC` | `oremi/akorin/response` | Processed JSON responses.                                                  |
-| `MQTT_STATE_TOPIC`    | `oremi/akorin/state`    | Retained `online`, `processing`, or `offline` state.                       |
+| `OREMI_DEVICE_MQTT_TOPIC` | `oremi/device`     | Base topic shared with Oremi Device nodes.                                 |
 | `MQTT_KEEPALIVE`      | `60`                    | Keepalive in seconds; minimum 10.                                          |
 | `MQTT_TLS_ENABLED`    | `false`                 | Enable TLS for the broker connection.                                      |
 | `MQTT_TLS_CA_CERT`    | System default          | Optional path to a CA certificate file.                                    |
@@ -225,29 +223,26 @@ and "What time is it in Lagos?".
 
 ## MQTT API
 
-When MQTT is enabled, publish the same object accepted by `POST /api/process`
-to `MQTT_REQUEST_TOPIC`:
+When MQTT is enabled, Akọrin subscribes to final transcriptions from every
+Oremi Device node:
 
 ```bash
 mosquitto_pub -h localhost \
-  -t oremi/akorin/request \
-  -m '{"text":"Weather in Lagos","language":"en","context":{"timezone":"Africa/Lagos"}}'
+  -t oremi/device/nodes/living-room/transcription/result \
+  -m '{"text":"Weather in Lagos"}'
 ```
 
-A JSON string is accepted as shorthand:
+Subscribe for that node's processing results:
 
 ```bash
-mosquitto_pub -h localhost -t oremi/akorin/request -m '"What time is it?"'
+mosquitto_sub -h localhost -t 'oremi/device/nodes/living-room/processing/result'
 ```
 
-Subscribe for results and state changes:
-
-```bash
-mosquitto_sub -h localhost -t 'oremi/akorin/response' -t 'oremi/akorin/state'
-```
-
-Responses use the same JSON structure as the HTTP endpoint. Invalid MQTT
-requests return an object with `ok: false` and a `message` field.
+The response is a non-retained QoS 1 object with a `message` field, ready for
+Oremi Device to speak. Akọrin selects and validates ordered device commands from
+media and scheduling service results. Direct playback, volume, mute, and voice
+requests are also resolved locally without conversational processing. The node
+ID is preserved from the transcription topic.
 
 ## Zigbee2MQTT
 

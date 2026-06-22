@@ -18,9 +18,9 @@ from typing import Dict
 from ..components.base import ComponentClient
 from ..llm.ollama import OllamaClient
 from ..services.orchestrator import Orchestrator
-from .config import Settings
 from .models import Service
 from .mqtt import MQTTService
+from .settings import Settings
 
 
 @dataclass(kw_only=True)

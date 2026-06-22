@@ -88,19 +88,6 @@ repos:
         entry: hadolint
         language: system
         files: Dockerfile
-      - id: autopep8
-        name: 'Fix Python Code Style using AutoPEP8'
-        description: 'Runs `autopep8` to format Python code according to PEP 8 standards.'
-        entry: autopep8
-        language: system
-        files: '\.py$'
-        args: [
-            '--in-place',
-            '--recursive',
-            # Error codes: https://pycodestyle.pycqa.org/en/latest/intro.html#error-codes
-            '--ignore',
-            'E1,E501',
-          ]
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: v0.15.17

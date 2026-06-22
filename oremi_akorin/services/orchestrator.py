@@ -30,6 +30,8 @@ from ..core.models import ProcessRequest
 from ..core.models import ProcessResponse
 from ..llm.ollama import OllamaClient
 from ..utils.language import detect_language
+from .device_commands import select_device_commands
+from .device_commands import select_direct_device_command
 from .router import rule_route
 from .tools import ToolRegistry
 
@@ -68,6 +70,19 @@ class Orchestrator:
     request_id = uuid4().hex[:8]
     processing_started = perf_counter()
     language = request.language or detect_language(request.text)
+    direct_device_control = select_direct_device_command(request.text, language)
+
+    if direct_device_control is not None:
+      message, command = direct_device_control
+      return ProcessResponse(
+        input=request.text,
+        language=language,
+        service=Service.DEVICE,
+        message=message,
+        confidence=1,
+        commands=[command],
+      )
+
     processing_text = request.text
     processing_language = language
     ok = True
@@ -158,9 +173,7 @@ class Orchestrator:
         if handler is None:
           raise ComponentUnavailable(service, "component is not configured")
 
-        logger.debug(
-          f"[{request_id}] Dispatching request: service={service.value} handler={type(handler).__name__}"
-        )
+        logger.debug(f"[{request_id}] Dispatching request: service={service.value} handler={type(handler).__name__}")
         dispatch_started = perf_counter()
         handler_context = request.context
 
@@ -211,8 +224,7 @@ class Orchestrator:
           confidence = min(confidence, 0.7)
 
           logger.debug(
-            f"[{request_id}] Web search fallback completed: "
-            f"duration_ms={(perf_counter() - fallback_started) * 1000:.1f}"
+            f"[{request_id}] Web search fallback completed: duration_ms={(perf_counter() - fallback_started) * 1000:.1f}"
           )
         except ComponentUnavailable as search_error:
           logger.warning(f"[{request_id}] Web search fallback failed: {search_error.reason}")
@@ -283,6 +295,7 @@ class Orchestrator:
       data=data,
       confidence=confidence,
     )
+    response.commands = select_device_commands(response)
 
     logger.debug(
       f"[{request_id}] Processing completed: ok={response.ok} service={response.service.value} "

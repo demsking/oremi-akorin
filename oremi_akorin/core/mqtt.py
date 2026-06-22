@@ -23,9 +23,9 @@ import paho.mqtt.client as mqtt
 
 from ..core.models import ProcessRequest
 from ..core.models import ProcessResponse
-from .config import Settings
 from .logger import logger
 from .logger import tracebacks_enabled
+from .settings import Settings
 
 
 class MQTTService:
@@ -92,7 +92,6 @@ class MQTTService:
 
   def stop(self) -> None:
     if self.connected:
-      self.client.publish(self.settings.mqtt_state_topic, "offline", retain=True)
       self.client.disconnect()
 
     if self.started:
@@ -132,15 +131,13 @@ class MQTTService:
     properties: mqtt.Properties | None,
   ) -> None:
     if reason_code == 0:
-      client.subscribe(self.settings.mqtt_request_topic)
+      client.subscribe(self.settings.mqtt_transcription_topic, qos=1)
 
       for topic in self.message_handlers:
         client.subscribe(topic)
 
-      client.publish(self.settings.mqtt_state_topic, "online", retain=True)
       logger.info(
-        f"MQTT connected: request_topic={self.settings.mqtt_request_topic} "
-        f"response_topic={self.settings.mqtt_response_topic} handlers={len(self.message_handlers)}"
+        f"MQTT connected: transcription_topic={self.settings.mqtt_transcription_topic} handlers={len(self.message_handlers)}"
       )
       self._signal_connection_result()
     else:
@@ -177,7 +174,8 @@ class MQTTService:
         return
 
     if self.loop:
-      asyncio.run_coroutine_threadsafe(self._process(message.payload), self.loop)
+      future = asyncio.run_coroutine_threadsafe(self._process(message.topic, message.payload), self.loop)
+      future.add_done_callback(lambda completed: self._log_handler_failure(completed, message.topic))
 
   def _log_handler_failure(self, future: Future[None], topic: str) -> None:
     try:
@@ -188,20 +186,33 @@ class MQTTService:
         exc_info=tracebacks_enabled(),
       )
 
-  async def _process(self, payload: bytes) -> None:
-    self.client.publish(self.settings.mqtt_state_topic, "processing", retain=True)
+  async def _process(self, topic: str, payload: bytes) -> None:
+    node_id = self._node_id(topic)
 
     try:
       body = json.loads(payload)
-
-      if isinstance(body, str):
-        body = {"text": body}
-
       response = await self.processor(ProcessRequest.model_validate(body))
-      output = response.model_dump_json()
+      device_response = {"message": response.message}
+
+      if response.commands:
+        device_response["commands"] = [command.model_dump(mode="json", exclude_none=True) for command in response.commands]  # type: ignore
+
+      output = json.dumps(device_response)
     except Exception as exc:  # MQTT must always return a response to its caller.
       logger.error(f"Could not process MQTT request: {exc}", exc_info=tracebacks_enabled())
-      output = json.dumps({"ok": False, "message": str(exc)})
+      output = json.dumps({"message": str(exc)})
 
-    self.client.publish(self.settings.mqtt_response_topic, output)
-    self.client.publish(self.settings.mqtt_state_topic, "online", retain=True)
+    self.client.publish(self.settings.mqtt_processing_result_topic(node_id), output, qos=1)
+
+  def _node_id(self, topic: str) -> str:
+    prefix = f"{self.settings.oremi_device_mqtt_topic}/nodes/"
+    suffix = "/transcription/result"
+
+    if not topic.startswith(prefix) or not topic.endswith(suffix):
+      raise ValueError(f"Unexpected Oremi Device transcription topic: {topic}")
+
+    node_id = topic[len(prefix) : -len(suffix)]
+    if not node_id or "/" in node_id:
+      raise ValueError(f"Invalid Oremi Device node ID in topic: {topic}")
+
+    return node_id

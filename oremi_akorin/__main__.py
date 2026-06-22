@@ -18,9 +18,9 @@ import httpx
 import uvicorn
 
 from .core.args import parse_arguments
-from .core.config import get_settings
-from .core.config import Settings
 from .core.package import APP_VERSION
+from .core.settings import get_settings
+from .core.settings import Settings
 
 __version__ = APP_VERSION
 

@@ -730,7 +730,7 @@ wheels = [
 
 [[package]]
 name = "oremi-akorin"
-version = "1.0.0b3"
+version = "1.0.0b1"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },

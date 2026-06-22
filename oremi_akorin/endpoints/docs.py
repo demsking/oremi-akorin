@@ -15,7 +15,7 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
-from ..core.config import Settings
+from ..core.settings import Settings
 
 
 def create_docs_endpoints(api: FastAPI, settings: Settings) -> None:
