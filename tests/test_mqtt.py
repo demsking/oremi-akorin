@@ -161,18 +161,26 @@ async def test_processes_final_transcription_and_replies_to_same_node(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_invalid_transcription_returns_device_compatible_error(monkeypatch):
+@pytest.mark.parametrize(
+  "payload",
+  [
+    b"",
+    b"not-json",
+    b'{"partial":"hello"}',
+    b'{"text":""}',
+  ],
+)
+async def test_invalid_transcription_is_ignored(payload, monkeypatch, caplog):
   settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
   service = MQTTService(settings, processor)
   published = []
   monkeypatch.setattr(service.client, "publish", lambda *args, **kwargs: published.append((args, kwargs)))
 
-  await service._process("oremi/device/nodes/bedroom/transcription/result", b'{"partial":"hello"}')
+  with caplog.at_level(logging.DEBUG, logger="oremi-akorin"):
+    await service._process("oremi/device/nodes/bedroom/transcription/result", payload)
 
-  topic, output = published[0][0]
-  assert topic == "oremi/device/nodes/bedroom/processing/result"
-  assert "message" in __import__("json").loads(output)
-  assert published[0][1] == {"qos": 1}
+  assert published == []
+  assert any("Ignored" in record.getMessage() and "node=bedroom" in record.getMessage() for record in caplog.records)
 
 
 @pytest.mark.asyncio

@@ -20,6 +20,7 @@ from collections.abc import Callable
 from concurrent.futures import Future
 
 import paho.mqtt.client as mqtt
+from pydantic import ValidationError
 
 from ..core.models import ProcessRequest
 from ..core.models import ProcessResponse
@@ -189,9 +190,19 @@ class MQTTService:
   async def _process(self, topic: str, payload: bytes) -> None:
     node_id = self._node_id(topic)
 
+    if not payload.strip():
+      logger.debug(f"Ignored empty MQTT transcription: node={node_id}")
+      return
+
     try:
       body = json.loads(payload)
-      response = await self.processor(ProcessRequest.model_validate(body))
+      request = ProcessRequest.model_validate(body)
+    except (json.JSONDecodeError, UnicodeDecodeError, ValidationError) as exception:
+      logger.warning(f"Ignored invalid MQTT transcription: node={node_id} error={exception}")
+      return
+
+    try:
+      response = await self.processor(request)
       device_response = {"message": response.message}
 
       if response.commands:
