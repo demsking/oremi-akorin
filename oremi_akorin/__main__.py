@@ -21,6 +21,7 @@ from .core.args import parse_arguments
 from .core.package import APP_VERSION
 from .core.settings import get_settings
 from .core.settings import Settings
+from .utils.http_logging import enable_http_request_logging
 
 __version__ = APP_VERSION
 
@@ -55,6 +56,7 @@ async def _serve(settings: Settings) -> None:
 async def _status(settings: Settings) -> None:
   try:
     async with httpx.AsyncClient() as client:
+      enable_http_request_logging(client)
       response = await client.get(f"http://localhost:{settings.server_port}/health")
 
       response.raise_for_status()

@@ -34,6 +34,7 @@ from ..llm.ollama import OllamaClient
 from ..services.orchestrator import Orchestrator
 from ..services.search import SearchService
 from ..services.wikipedia import WikipediaService
+from ..utils.http_logging import enable_http_request_logging
 from .constants import Language
 from .constants import Service
 from .context import AppContext
@@ -124,6 +125,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     log_startup_settings(settings)
 
     client = http_client or httpx.AsyncClient(timeout=settings.request_timeout)
+    enable_http_request_logging(client)
     ollama = OllamaClient(str(settings.ollama_host), settings.ollama_model, client)
 
     configured_components = (
