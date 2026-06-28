@@ -25,6 +25,8 @@ from ..core.constants import Service
 from ..core.exceptions import ComponentUnavailable
 from ..core.logger import logger
 from ..utils.http_retry import request_with_retry
+from ..utils.request_context import contextualized_text
+from ..utils.request_context import request_context
 
 
 class ComponentServiceInfo(BaseModel):
@@ -50,6 +52,12 @@ class ComponentClient:
 
   async def process(self, text: str, language: str, context: dict[str, Any], tags: dict[str, str]) -> tuple[str, Any]:
     raise NotImplementedError
+
+  def request_context(self, context: dict[str, Any]) -> str | None:
+    return request_context(context)
+
+  def contextualized_text(self, text: str, context: dict[str, Any]) -> str:
+    return contextualized_text(text, context)
 
   async def request_json(self, method: str, **kwargs: Any) -> Any:
     started = perf_counter()

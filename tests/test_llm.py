@@ -12,19 +12,21 @@ from oremi_akorin.services.tools import ToolRegistry
 
 @pytest.mark.asyncio
 async def test_chat_prompt_forbids_meta_commentary():
-  captured_prompt = ""
+  captured = None
 
   def handler(request: httpx.Request) -> httpx.Response:
-    nonlocal captured_prompt
-    captured_prompt = request.read().decode()
+    nonlocal captured
+    captured = json.loads(request.content)
     return httpx.Response(200, json={"response": "Ça va bien."})
 
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
     ollama = OllamaClient("http://ollama.test/", "qwen2.5:3b", client)
-    response = await ollama.chat("Comment vas-tu ?", "fr", {})
+    response = await ollama.chat("Comment vas-tu ?", "fr", {"mood": "curious"})
 
+  assert captured is not None
   assert response == "Ça va bien."
-  assert "Never include notes" in captured_prompt
+  assert "Never include notes" in captured["prompt"]
+  assert 'Context: {"mood":"curious"}' in captured["prompt"]
 
 
 @pytest.mark.asyncio
@@ -94,15 +96,16 @@ async def test_native_ollama_tool_call_loop():
   tools = ToolRegistry([DateTimeTool(clock=lambda: current)])
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
     ollama = OllamaClient("http://ollama.test/", "qwen2.5:3b", client)
-    result = await ollama.chat_with_tools("Quelle heure est-il ?", "fr", {}, tools)
+    result = await ollama.chat_with_tools("Quelle heure est-il ?", "fr", {"timezone": "Europe/Paris"}, tools)
 
   assert result.message == "Il est 14 h 32."
   assert result.tools[0].name == "get_current_datetime"
   assert requests[0]["tools"][0]["function"]["name"] == "get_current_datetime"
+  assert requests[0]["messages"][1]["content"] == 'Quelle heure est-il ?\n\nContext: {"timezone":"Europe/Paris"}'
   tool_message = requests[1]["messages"][-1]
   assert tool_message["role"] == "tool"
   assert tool_message["tool_name"] == "get_current_datetime"
-  assert json.loads(tool_message["content"])["datetime"] == "2026-06-20T14:32:00+00:00"
+  assert json.loads(tool_message["content"])["datetime"] == "2026-06-20T16:32:00+02:00"
 
 
 @pytest.mark.asyncio

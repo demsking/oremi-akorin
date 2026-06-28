@@ -19,6 +19,7 @@ import httpx
 from ..core.constants import Service
 from ..core.exceptions import ComponentUnavailable
 from ..utils.http_retry import request_with_retry
+from ..utils.request_context import contextualized_text
 
 
 class SearchService:
@@ -27,11 +28,13 @@ class SearchService:
     self.timeout = timeout
 
   async def process(self, text: str, language: str, context: dict[str, Any], tags: dict[str, str]) -> tuple[str, Any]:
+    query = contextualized_text(text, context)
+
     try:
       response = await request_with_retry(
         lambda: self.client.get(
           "https://api.duckduckgo.com/",
-          params={"q": text, "format": "json", "no_html": 1, "skip_disambig": 1},
+          params={"q": query, "format": "json", "no_html": 1, "skip_disambig": 1},
           timeout=self.timeout,
         ),
         Service.SEARCH.value,

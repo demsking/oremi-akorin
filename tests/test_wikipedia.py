@@ -49,6 +49,36 @@ async def test_wikipedia_returns_localized_article_extract_and_attribution():
 
 
 @pytest.mark.asyncio
+async def test_wikipedia_includes_request_context_in_search_text():
+  captured = None
+
+  def handler(request: httpx.Request) -> httpx.Response:
+    nonlocal captured
+    captured = request
+    return httpx.Response(
+      200,
+      json={
+        "query": {
+          "pages": [
+            {
+              "title": "Python",
+              "extract": "Python is a programming language.",
+              "fullurl": "https://en.wikipedia.org/wiki/Python_(programming_language)",
+            }
+          ]
+        }
+      },
+    )
+
+  async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+    service = WikipediaService(client)
+    await service.process("Python", "en", {"topic": "programming", "audience": "beginner"}, {})
+
+  assert captured is not None
+  assert captured.url.params["gsrsearch"] == 'Python\n\nContext: {"audience":"beginner","topic":"programming"}'
+
+
+@pytest.mark.asyncio
 async def test_wikipedia_signals_when_no_article_matches():
   transport = httpx.MockTransport(lambda request: httpx.Response(200, json={"query": {"pages": []}}))
   async with httpx.AsyncClient(transport=transport) as client:

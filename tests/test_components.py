@@ -61,7 +61,7 @@ async def test_isinmi_uses_natural_language_request_contract():
   assert captured.url.path == "/api/agent/message"
   assert captured.url.params["language"] == "fr"
   assert json.loads(captured.content) == {
-    "text": "Rappelle-moi la réunion demain",
+    "text": 'Rappelle-moi la réunion demain\n\nContext: {"timezone":"Europe/Paris"}',
     "timezone": "Europe/Paris",
     "tags": ["user:user-id", "device:device-id"],
   }
@@ -91,7 +91,7 @@ async def test_weather_uses_climate_query_contract():
   assert captured.method == "GET"
   assert captured.url.path == "/api/agent/climate"
   assert dict(captured.url.params) == {
-    "q": "Quel temps fait-il à Paris ?",
+    "q": 'Quel temps fait-il à Paris ?\n\nContext: {"temperature_unit":"fahrenheit","timezone":"Europe/Paris"}',
     "timezone": "Europe/Paris",
     "temperature-unit": "fahrenheit",
   }
@@ -169,12 +169,15 @@ async def test_media_components_use_ask_query_contract(component_type, name, url
 
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
     component = component_type(name, url, client)
-    await component.process("Trouve quelque chose", "fr", {}, {})
+    await component.process("Trouve quelque chose", "fr", {"device": "kitchen", "profile": {"age": 8}}, {})
 
   assert captured is not None
   assert captured.method == "GET"
   assert captured.url.path == "/api/ask"
-  assert dict(captured.url.params) == {"query": "Trouve quelque chose", "language": "fr"}
+  assert dict(captured.url.params) == {
+    "query": 'Trouve quelque chose\n\nContext: {"device":"kitchen","profile":{"age":8}}',
+    "language": "fr",
+  }
 
 
 @pytest.mark.asyncio
@@ -247,4 +250,34 @@ async def test_zigbee_extracts_device_and_state_from_natural_language():
   assert data == {"device": "Lumière de la chambre", "command": {"state": "ON"}}
   assert mqtt_service.client.published == [
     ("zigbee2mqtt/Lumière de la chambre/set", '{"state": "ON"}'),
+  ]
+
+
+@pytest.mark.asyncio
+async def test_zigbee_uses_context_when_extracting_natural_language_command():
+  mqtt_service = FakeMQTTService()
+  mqtt_service.client = FakeZigbeeClient()
+  component = ZigbeeComponent(mqtt_service)  # type: ignore[arg-type]
+  component.devices = {
+    "Bedroom switch": {
+      "friendly_name": "Interrupteur de la chambre",
+      "ieee_address": "0xa4c13846a1d3578c",
+    },
+    "Kitchen switch": {
+      "friendly_name": "Interrupteur de la cuisine",
+      "ieee_address": "0xa4c13846a1d3578d",
+    },
+  }
+
+  message, data = await component.process(
+    "turn on the switch",
+    "en",
+    {"room": "bedroom"},
+    {},
+  )
+
+  assert message == "Command sent to Bedroom switch."
+  assert data == {"device": "Bedroom switch", "command": {"state": "ON"}}
+  assert mqtt_service.client.published == [
+    ("zigbee2mqtt/Interrupteur de la chambre/set", '{"state": "ON"}'),
   ]

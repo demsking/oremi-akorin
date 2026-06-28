@@ -21,6 +21,9 @@ class KansaClient(ComponentClient):
   endpoint_path = "/api/ask"
 
   async def process(self, text: str, language: str, context: dict[str, Any], tags: dict[str, str]) -> tuple[str, Any]:
-    data = await self.request_json("GET", params={"query": text, "language": language})
+    data = await self.request_json(
+      "GET",
+      params={"query": self.contextualized_text(text, context), "language": language},
+    )
 
     return self.parse_response(data)

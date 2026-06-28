@@ -26,13 +26,15 @@ class WeatherClient(ComponentClient):
   endpoint_path = "/api/agent/climate"
 
   async def process(self, text: str, language: str, context: dict[str, Any], tags: dict[str, str]) -> tuple[str, Any]:
+    params: dict[str, Any] = {
+      "q": self.contextualized_text(text, context),
+      "timezone": str(context.get("timezone", "UTC")),
+      "temperature-unit": self._temperature_unit(context),
+    }
+
     data = await self.request_json(
       "GET",
-      params={
-        "q": text,
-        "timezone": str(context.get("timezone", "UTC")),
-        "temperature-unit": self._temperature_unit(context),
-      },
+      params=params,
     )
 
     return self.parse_response(data)
@@ -75,16 +77,15 @@ class WeatherAlertsClient(WeatherClient):
         message_fr="Veuillez indiquer un lieu pour que je puisse vérifier les alertes dans cette zone.",
       )
 
-    data = await self.request_json(
-      "GET",
-      params={
-        "service": service,
-        "lat": latitude,
-        "lon": longitude,
-        "timezone": str(context.get("timezone", "UTC")),
-        "language": language,
-        "temperature-unit": self._temperature_unit(context),
-      },
-    )
+    params = {
+      "service": service,
+      "lat": latitude,
+      "lon": longitude,
+      "timezone": str(context.get("timezone", "UTC")),
+      "language": language,
+      "temperature-unit": self._temperature_unit(context),
+    }
+
+    data = await self.request_json("GET", params=params)
 
     return self.parse_response(data)

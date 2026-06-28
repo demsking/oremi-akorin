@@ -20,6 +20,7 @@ from ..core.constants import Service
 from ..core.exceptions import ComponentUnavailable
 from ..core.exceptions import NoResultFound
 from ..utils.http_retry import request_with_retry
+from ..utils.request_context import contextualized_text
 
 USER_AGENT = "oremi-akorin/1.0 (https://gitlab.com/demsking/oremi-akorin)"
 
@@ -30,6 +31,7 @@ class WikipediaService:
 
   async def process(self, text: str, language: str, context: dict[str, Any], tags: dict[str, str]) -> tuple[str, Any]:
     wiki_language = language if language in {"en", "fr"} else "en"
+    search_text = contextualized_text(text, context)
 
     try:
       response = await request_with_retry(
@@ -38,7 +40,7 @@ class WikipediaService:
           params={
             "action": "query",
             "generator": "search",
-            "gsrsearch": text,
+            "gsrsearch": search_text,
             "gsrlimit": 1,
             "prop": "extracts|info",
             "exintro": 1,

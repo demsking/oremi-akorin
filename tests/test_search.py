@@ -25,10 +25,16 @@ async def test_search_returns_a_direct_answer_with_attribution():
   transport = httpx.MockTransport(handler)
 
   async with httpx.AsyncClient(transport=transport) as client:
-    message, data = await SearchService(client, timeout=3.5).process("Python language", "en", {}, {})
+    message, data = await SearchService(client, timeout=3.5).process(
+      "Python language",
+      "en",
+      {"audience": "developer"},
+      {},
+    )
 
   assert captured is not None
   assert captured.extensions["timeout"]["read"] == 3.5
+  assert captured.url.params["q"] == 'Python language\n\nContext: {"audience":"developer"}'
   assert message == "Python is a programming language."
   assert data == {
     "source": "Wikipedia",

@@ -41,7 +41,7 @@ class IsinmiClient(ComponentClient):
       )
 
     payload = NaturalLanguageRequest(
-      text=text,
+      text=self.contextualized_text(text, context),
       timezone=str(timezone),
       tags=[f"{name}:{value}" for name, value in tags.items()],
     )

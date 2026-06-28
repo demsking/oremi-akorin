@@ -68,12 +68,15 @@ def test_process_openapi_documentation_describes_contract():
 
   assert operation["summary"] == "Process a natural-language request"
   assert "HTTP 200" in operation["description"]
-  assert set(operation["requestBody"]["content"]["application/json"]["examples"]) == {
+  request_examples = operation["requestBody"]["content"]["application/json"]["examples"]
+
+  assert {
     "weather",
     "reminder",
     "weather_alert",
     "zigbee",
-  }
+  } <= set(request_examples)
+  assert all({"summary", "description", "value"} <= set(example) for example in request_examples.values())
   assert set(operation["responses"]) == {"200", "422", "500"}
   assert set(operation["responses"]["200"]["content"]["application/json"]["examples"]) == {
     "weather",

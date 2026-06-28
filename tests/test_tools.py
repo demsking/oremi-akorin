@@ -27,6 +27,36 @@ async def test_datetime_tool_returns_real_clock_data():
 
 
 @pytest.mark.asyncio
+async def test_tool_registry_uses_context_arguments_as_defaults():
+  current = datetime(2026, 6, 20, 14, 32, tzinfo=timezone.utc)
+  registry = ToolRegistry([DateTimeTool(clock=lambda: current)])
+
+  result = await registry.execute(
+    "get_current_datetime",
+    {},
+    {"tools": {"get_current_datetime": {"timezone": "Europe/Paris"}}},
+  )
+
+  assert result.data["time"] == "16:32:00"
+  assert result.data["timezone"] == "Europe/Paris"
+
+
+@pytest.mark.asyncio
+async def test_tool_registry_keeps_explicit_arguments_over_context_defaults():
+  current = datetime(2026, 6, 20, 14, 32, tzinfo=timezone.utc)
+  registry = ToolRegistry([DateTimeTool(clock=lambda: current)])
+
+  result = await registry.execute(
+    "get_current_datetime",
+    {"timezone": "UTC"},
+    {"tools": {"get_current_datetime": {"timezone": "Europe/Paris"}}},
+  )
+
+  assert result.data["time"] == "14:32:00"
+  assert result.data["timezone"] == "UTC"
+
+
+@pytest.mark.asyncio
 async def test_registry_returns_structured_error_for_unknown_tool():
   result = await ToolRegistry([]).execute("missing_tool", {}, {})
 

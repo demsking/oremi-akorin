@@ -28,6 +28,7 @@ from ..core.exceptions import ComponentUnavailable
 from ..core.logger import logger
 from ..core.logger import tracebacks_enabled
 from ..core.mqtt import MQTTService
+from ..utils.request_context import contextualized_text
 
 DEVICES_TOPIC = "zigbee2mqtt/bridge/devices"
 ORIGINAL_TEXT_CONTEXT_KEY = "_oremi_original_text"
@@ -229,7 +230,7 @@ class ZigbeeComponent:
     device = str(context.get("device") or tags.get("device") or "").strip()
     state = context.get("state")
     original_text = str(context.get(ORIGINAL_TEXT_CONTEXT_KEY) or "").strip()
-    command_texts = [text, original_text]
+    command_texts = [contextualized_text(text, context), original_text]
 
     if not self.client or not self.client.is_connected():
       raise ComponentUnavailable(Service.ZIGBEE, "MQTT is disconnected")

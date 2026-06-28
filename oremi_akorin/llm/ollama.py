@@ -22,6 +22,8 @@ from typing import TYPE_CHECKING
 import httpx
 
 from ..core.constants import Service
+from ..utils.request_context import contextualized_text
+from ..utils.request_context import request_context
 from .prompts import CHAT_PROMPT
 from .prompts import CHAT_SYSTEM_PROMPT
 from .prompts import GROUNDED_ANSWER_PROMPT
@@ -103,7 +105,9 @@ class OllamaClient:
     )
 
   async def chat(self, text: str, language: str, context: dict[str, Any]) -> str:
-    return await self._generate(CHAT_PROMPT.format(text=text, language=language, context=json.dumps(context)))
+    return await self._generate(
+      CHAT_PROMPT.format(text=text, language=language, context=request_context(context) or "{}")
+    )
 
   async def answer_from_source(self, question: str, source: str, language: str) -> str:
     prompt = GROUNDED_ANSWER_PROMPT.format(
@@ -137,7 +141,7 @@ class OllamaClient:
   ) -> ChatResult:
     messages: list[dict[str, Any]] = [
       {"role": "system", "content": CHAT_SYSTEM_PROMPT.format(language=language)},
-      {"role": "user", "content": text},
+      {"role": "user", "content": contextualized_text(text, context)},
     ]
     executed_tools: list[ToolResult] = []
 

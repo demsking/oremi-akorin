@@ -20,7 +20,7 @@ ps:
 	docker compose -f .devcontainer/workspace.yaml ps $(COMPOSE_SERVICES)
 
 logs:
-	docker compose -f .devcontainer/workspace.yaml logs -f
+	docker compose -f .devcontainer/workspace.yaml logs -f isinmi weather rediyo kansa
 
 pull:
 	docker compose -f .devcontainer/workspace.yaml pull $(COMPOSE_SERVICES)

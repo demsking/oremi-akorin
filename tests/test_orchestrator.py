@@ -121,6 +121,20 @@ def test_rule_router_distinguishes_light_names_and_weather_stations_from_radio()
   assert weather is not None and weather.service == Service.WEATHER
 
 
+def test_rule_router_accepts_explicit_service_context():
+  match = rule_route("tell me about Lagos", {"route_to": "wikipedia"})
+
+  assert match is not None
+  assert match.service == Service.WIKIPEDIA
+  assert match.reason == "explicit service context"
+
+
+def test_rule_router_ignores_non_service_context_values():
+  match = rule_route("Are there alerts?", {"service": "air-quality"})
+
+  assert match is None
+
+
 @pytest.mark.asyncio
 async def test_process_uses_router_fallback_and_component():
   orchestrator = Orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent()})

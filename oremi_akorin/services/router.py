@@ -31,7 +31,11 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
   words = set(normalized.split())
   context = context or {}
 
-  if context.get("device") or context.get("state") is not None:
+  context_service = _context_service(context)
+
+  if context_service is not None:
+    match = RoutingMatch(context_service, 0.99, "explicit service context")
+  elif context.get("device") or context.get("state") is not None:
     match = RoutingMatch(Service.ZIGBEE, 0.99, "structured device/state context")
   else:
     match = None
@@ -119,3 +123,18 @@ def _normalize(text: str) -> str:
 
 def _contains_any(text: str, phrases: tuple[str, ...]) -> bool:
   return any(phrase in text for phrase in phrases)
+
+
+def _context_service(context: dict[str, Any]) -> Service | None:
+  for key in ("route_to", "target_service", "service"):
+    value = context.get(key)
+
+    if value is None:
+      continue
+
+    try:
+      return Service(str(value))
+    except ValueError:
+      continue
+
+  return None

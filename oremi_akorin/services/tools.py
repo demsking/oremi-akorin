@@ -283,4 +283,17 @@ class ToolRegistry:
     tool = self.tools.get(name)
     if tool is None:
       return ToolResult(name=name, data={"error": f"Unknown tool: {name}"})
-    return await tool.execute(arguments, context)
+    return await tool.execute(self._arguments(name, arguments, context), context)
+
+  def _arguments(self, name: str, arguments: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    defaults: dict[str, Any] = {}
+    tools_context = context.get("tools")
+    named_context = context.get(name)
+
+    if isinstance(tools_context, dict) and isinstance(tools_context.get(name), dict):
+      defaults.update(tools_context[name])
+
+    if isinstance(named_context, dict):
+      defaults.update(named_context)
+
+    return defaults | arguments
