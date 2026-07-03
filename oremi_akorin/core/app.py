@@ -67,7 +67,7 @@ def log_startup_settings(config: Settings) -> None:
   )
 
   logger.info(
-    f"App settings [ollama]: host={_safe_endpoint(config.ollama_host)} model={config.ollama_model} "
+    f"App settings [ollama]: host={_safe_endpoint(config.ollama_baseurl)} model={config.ollama_model} "
     f"pull_model={config.ollama_pull_model} request_timeout={config.ollama_request_timeout:.1f}s"
   )
 
@@ -126,7 +126,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
 
     client = http_client or httpx.AsyncClient(timeout=settings.request_timeout)
     enable_http_request_logging(client)
-    ollama = OllamaClient(str(settings.ollama_host), settings.ollama_model, client)
+    ollama = OllamaClient(str(settings.ollama_baseurl), settings.ollama_model, client)
 
     configured_components = (
       (Service.ISINMI, settings.isinmi_url, IsinmiClient),

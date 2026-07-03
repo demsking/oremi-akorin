@@ -39,6 +39,7 @@ services:
     environment:
       LOG_LEVEL: 'DEBUG'
       OLLAMA_BASEURL: http://ollama:11434
+      OLLAMA_MODEL: $OLLAMA_MODEL
     volumes:
       - ./volumes/isinmi:/var/config/oremi-isinmi-agent
 
@@ -52,6 +53,7 @@ services:
     environment:
       LOG_LEVEL: 'DEBUG'
       OLLAMA_BASEURL: http://ollama:11434
+      OLLAMA_MODEL: $OLLAMA_MODEL
 
   rediyo:
     image: demsking/oremi-rediyo-agent
@@ -65,6 +67,7 @@ services:
     environment:
       LOG_LEVEL: 'DEBUG'
       OLLAMA_BASEURL: http://ollama:11434
+      OLLAMA_MODEL: $OLLAMA_MODEL
 
   kansa:
     image: demsking/oremi-kansa-agent
@@ -78,4 +81,5 @@ services:
     environment:
       LOG_LEVEL: 'DEBUG'
       OLLAMA_BASEURL: http://ollama:11434
+      OLLAMA_MODEL: $OLLAMA_MODEL
 ...

@@ -49,14 +49,14 @@ ollama pull qwen2.5:3b
 In another terminal, configure the required Ollama URL and start Akọrin:
 
 ```bash
-export OLLAMA_HOST=http://localhost:11434
+export OLLAMA_BASEURL=http://localhost:11434
 oremi-akorin
 ```
 
 For a repository checkout, use:
 
 ```bash
-OLLAMA_HOST=http://localhost:11434 uv run oremi-akorin
+OLLAMA_BASEURL=http://localhost:11434 uv run oremi-akorin
 ```
 
 The server listens on `http://localhost:5020` by default. Open
@@ -84,12 +84,12 @@ The `status` command queries `/health` on `localhost` using the configured
 
 Configuration is loaded from environment variables and from a `.env` file in
 the current working directory. Environment variable names are
-case-insensitive. `OLLAMA_HOST` is the only required setting.
+case-insensitive. `OLLAMA_BASEURL` is the only required setting.
 
 Minimal `.env` file:
 
 ```dotenv
-OLLAMA_HOST=http://localhost:11434
+OLLAMA_BASEURL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:3b
 SERVER_HOST=localhost
 SERVER_PORT=5020
@@ -102,7 +102,7 @@ SERVER_PORT=5020
 | `SERVER_HOST`            | No       | `localhost`  | Server bind address. Use `0.0.0.0` to accept remote connections. |
 | `SERVER_PORT`            | No       | `5020`       | Server port, from 1 to 65535.                                    |
 | `API_ROOT_PATH`          | No       | `/`          | Public root path when Akọrin runs behind a reverse proxy.        |
-| `OLLAMA_HOST`            | Yes      | None         | Ollama base URL including scheme and port.                       |
+| `OLLAMA_BASEURL`         | Yes      | None         | Ollama base URL including scheme and port.                       |
 | `OLLAMA_MODEL`           | No       | `qwen2.5:3b` | Model used for normalization, routing, chat, and tools.          |
 | `OLLAMA_PULL_MODEL`      | No       | `true`       | Pull the configured model at startup when it is missing.         |
 | `OLLAMA_REQUEST_TIMEOUT` | No       | `60.0`       | Ollama request timeout in seconds.                               |
@@ -147,17 +147,17 @@ returns an invalid response.
 
 MQTT is disabled when `MQTT_BROKER` is unset.
 
-| Variable              | Default                 | Description                                                                |
-| --------------------- | ----------------------- | -------------------------------------------------------------------------- |
-| `MQTT_BROKER`         | None                    | Broker hostname or IP address. A URL-style scheme is accepted and removed. |
-| `MQTT_PORT`           | `1883`                  | Broker port.                                                               |
-| `MQTT_CLIENT_ID`      | Generated               | MQTT client identifier.                                                    |
-| `MQTT_USERNAME`       | None                    | Optional broker username.                                                  |
-| `MQTT_PASSWORD`       | None                    | Optional broker password.                                                  |
-| `OREMI_DEVICE_MQTT_TOPIC` | `oremi/device`     | Base topic shared with Oremi Device nodes.                                 |
-| `MQTT_KEEPALIVE`      | `60`                    | Keepalive in seconds; minimum 10.                                          |
-| `MQTT_TLS_ENABLED`    | `false`                 | Enable TLS for the broker connection.                                      |
-| `MQTT_TLS_CA_CERT`    | System default          | Optional path to a CA certificate file.                                    |
+| Variable                  | Default        | Description                                                                |
+| ------------------------- | -------------- | -------------------------------------------------------------------------- |
+| `MQTT_BROKER`             | None           | Broker hostname or IP address. A URL-style scheme is accepted and removed. |
+| `MQTT_PORT`               | `1883`         | Broker port.                                                               |
+| `MQTT_CLIENT_ID`          | Generated      | MQTT client identifier.                                                    |
+| `MQTT_USERNAME`           | None           | Optional broker username.                                                  |
+| `MQTT_PASSWORD`           | None           | Optional broker password.                                                  |
+| `OREMI_DEVICE_MQTT_TOPIC` | `oremi/device` | Base topic shared with Oremi Device nodes.                                 |
+| `MQTT_KEEPALIVE`          | `60`           | Keepalive in seconds; minimum 10.                                          |
+| `MQTT_TLS_ENABLED`        | `false`        | Enable TLS for the broker connection.                                      |
+| `MQTT_TLS_CA_CERT`        | System default | Optional path to a CA certificate file.                                    |
 
 ### Logging
 
@@ -287,13 +287,13 @@ Run it with Ollama on the host:
 ```bash
 docker run --rm \
   --publish 5020:5020 \
-  --env OLLAMA_HOST=http://host.docker.internal:11434 \
+  --env OLLAMA_BASEURL=http://host.docker.internal:11434 \
   oremi-akorin
 ```
 
 On Linux, add `--add-host host.docker.internal:host-gateway`, use host
 networking, or use an address reachable from the container. When services run
-on a shared Docker network, use their container names in `OLLAMA_HOST` and the
+on a shared Docker network, use their container names in `OLLAMA_BASEURL` and the
 component URLs.
 
 Do not use `localhost` in a container URL to refer to a service running in a
@@ -318,7 +318,7 @@ especially when MQTT or smart-device control is enabled.
 
 ### Configuration error at startup
 
-Confirm that `OLLAMA_HOST` includes `http://` or `https://`. Component settings
+Confirm that `OLLAMA_BASEURL` includes `http://` or `https://`. Component settings
 must be base URLs, for example `http://weather:31777`, without `/api` paths.
 
 ### A configured component prevents startup

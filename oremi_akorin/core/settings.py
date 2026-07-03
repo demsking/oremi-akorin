@@ -71,10 +71,10 @@ class Settings(BaseSettings):
 
   # ── Ollama Settings ──────────────────────────────────────────────────────────
 
-  ollama_host: HttpUrl = Field(alias="OLLAMA_HOST", description="URL of the Ollama service. Must include scheme and port.")
+  ollama_baseurl: HttpUrl = Field(alias="OLLAMA_BASEURL", description="URL of the Ollama service.")
 
   ollama_model: str = Field(
-    default="qwen2.5:3b",
+    default="qwen3.5:2b",
     alias="OLLAMA_MODEL",
     description="Name of the Ollama model to load and use for NLP processing.",
   )
@@ -235,9 +235,9 @@ class Settings(BaseSettings):
 
   # ── Validators ──────────────────────────────────────────────────────────────
 
-  @field_validator("ollama_host", mode="before")
+  @field_validator("ollama_baseurl", mode="before")
   @classmethod
-  def validate_ollama_host(cls, value):
+  def validate_ollama_baseurl(cls, value):
     """Remove trailing slashes from Ollama host URL."""
     if isinstance(value, str):
       value = value.rstrip("/")

@@ -111,7 +111,7 @@ async def test_startup_and_shutdown_emit_operational_logs(caplog):
 
 def test_startup_settings_do_not_log_credentials_or_url_queries(caplog):
   settings = isolated_settings(
-    OLLAMA_HOST="http://ollama-user:ollama-secret@ollama.test:11434/?token=secret-token",
+    OLLAMA_BASEURL="http://ollama-user:ollama-secret@ollama.test:11434/?token=secret-token",
     MQTT_USERNAME="mqtt-user",
     MQTT_PASSWORD="mqtt-secret",
   )
