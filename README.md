@@ -2,9 +2,10 @@
 
 [![Buy me a beer](https://img.shields.io/badge/Buy%20me-a%20beer-1f425f.svg)](https://www.buymeacoffee.com/demsking)
 
-Oremi Akọrin is the bilingual NLP gateway for the Oremi ecosystem. It uses
-Ollama and `qwen2.5:3b` to route French and English requests to scheduling,
-weather, radio, podcast, Zigbee, web-search, or conversational services.
+Oremi Akọrin is the natural-language gateway for the Oremi ecosystem.
+It accepts requests over HTTP or MQTT, uses LLM to normalize and classify them,
+and dispatches each request to the appropriate service in the user's original
+language.
 
 ## Documentation
 

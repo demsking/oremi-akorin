@@ -39,20 +39,70 @@ class ProcessRequest(BaseModel):
     description="Input text to be processed by the NLP system. Must be between 1 and 8000 characters.",
     examples=[
       "What's the weather like in Lagos?",
+      "Quel temps fait-il à Paris ?",
       "Play me some Afrobeat music",
+      "Joue-moi de l'Afrobeat",
       "Who is the president of Nigeria?",
+      "Qui est le président du Nigeria ?",
+      "Set a reminder for tomorrow at 9 AM",
+      "Rappelle-moi demain à 9 h d'appeler maman",
       "Hello, how are you?",
+      "Bonjour, comment vas-tu ?",
     ],
   )
 
   language: Language | None = Field(
     default=None, description="Optional language code for the input text. If not provided, will be auto-detected."
   )
+
   context: dict[str, Any] = Field(
     default_factory=dict,
-    description="Optional contextual information for the request. Used to maintain conversation state or provide additional processing context.",
+    description=(
+      "Optional contextual information for the request. Used to maintain "
+      "conversation state or provide additional processing context.\n\n"
+      "Context carries structured data needed by a service, such as an IANA "
+      "timezone, coordinates, temperature unit, or device state."
+    ),
+    examples=[
+      {
+        "timezone": "Africa/Lagos",
+      },
+      {
+        "timezone": "Europe/Paris",
+        "latitude": 48.8566,
+        "longitude": 2.3522,
+        "temperature_unit": "celsius",
+      },
+      {
+        "device": {
+          "id": "living-room-speaker",
+          "location": "Living Room",
+        },
+      },
+    ],
   )
-  tags: list[str] = Field(default_factory=list, description="Optional key-value tags for request categorization and filtering.")
+
+  tags: list[str] = Field(
+    default_factory=list,
+    description=(
+      "Optional key-value tags for request categorization and filtering.\n\n"
+      "Tags are free-form client grouping keys used to organize and filter records"
+      "across the application. They are stored as normalized JSON arrays and can be"
+      "attached to reminders, events, notifications, and chat requests.\n\n"
+      "Use tags when you want to group records by values such as:\n"
+      "- `device_id:iphone-14`\n"
+      "- `device_id:web-app`\n"
+      "- `user_id:alex`\n\n"
+      "Tag-filtered endpoints match every requested tag, so"
+      "`?tags=device_id:iphone-14,user_id:alex` returns only records that carry both"
+      "tags."
+    ),
+    examples=[
+      ["device_id:web-app"],
+      ["device_id:iphone-14", "user_id:alex"],
+      ["room:kitchen", "source:voice"],
+    ],
+  )
 
 
 class DeviceCommand(BaseModel):

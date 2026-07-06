@@ -131,24 +131,6 @@ router = APIRouter(prefix="/agent", tags=[API_TAG_METADATA["name"]])
         }
       },
     },
-    422: {
-      "description": "The JSON body does not match the request schema.",
-      "content": {
-        "application/json": {
-          "example": {
-            "detail": [
-              {
-                "type": "string_too_short",
-                "loc": ["body", "message"],
-                "msg": "String should have at least 1 character",
-                "input": "",
-                "ctx": {"min_length": 1},
-              }
-            ]
-          }
-        }
-      },
-    },
     500: {
       "description": "An unexpected processing error occurred.",
       "content": {"application/json": {"example": {"detail": "Internal Server Error"}}},
@@ -537,15 +519,6 @@ async def process_user_input(
   - conversational answers and native date/time, calculator, or conversion tools;
   - Wikipedia for stable knowledge and DuckDuckGo for current information;
   - configured scheduling, weather, radio, podcast, or Zigbee services.
-
-  `context` carries structured data needed by a service, such as an IANA
-  timezone, coordinates, temperature unit, or device state. `tags` contains
-  caller-defined string metadata and is forwarded where supported.
-
-  A valid request normally returns HTTP 200 even when a selected service needs
-  more information or is temporarily unavailable. In that case, `ok` is false,
-  `message` is safe to show to the user, and `data.error.type` identifies the
-  failure. Schema validation failures return HTTP 422.
   """
   context: AppContext = request.app.state.context
 

@@ -1,9 +1,11 @@
-Oremi Akọrin is the bilingual natural-language gateway for the Oremi
-ecosystem. It accepts English and French requests over HTTP or MQTT, uses
-LLM to normalize and classify them, and dispatches each request to the
-appropriate service in the user's original language.
+Oremi Akọrin is the natural-language gateway for the Oremi ecosystem.
+It accepts requests over HTTP or MQTT, uses LLM to normalize and classify them,
+and dispatches each request to the appropriate service in the user's original
+language.
 
-Supported capabilities include:
+Project repository: https://gitlab.com/demsking/oremi-akorin
+
+## Core Capabilities
 
 - conversational responses through the configured LLM model;
 - schedules, reminders, timers, and alarms through Isinmi;
@@ -13,32 +15,56 @@ Supported capabilities include:
 - stable knowledge from Wikipedia and current information from DuckDuckGo;
 - native date/time, calculator, and unit-conversion tools.
 
-## Requirements
+## Deployment
 
-- Python 3.12, or Docker;
-- a configured LLM model;
-- when using the default `ollama:` backend, a reachable Ollama server and a
-  model with tool-calling support.
+Oremi Akọrin is distributed as a multi-platform Docker image for
+`linux/amd64` and `linux/arm64`. It can be deployed as a standalone service or
+integrated into the Oremi ecosystem alongside services such as Oremi Isinmi,
+Weather, Rediyo, and Kansa.
 
-The Oremi component services and MQTT are optional. Without them, Akọrin can
-still provide chat, Wikipedia, search, and native tools. MQTT is required only
-for MQTT requests and Zigbee control.
+The following sections describe the available Docker image, persistent storage
+requirements, and example deployments using both Docker and Docker Compose.
 
-## Installation
+### Command Line
 
-### PyPI with uv
+Before installing Oremi Akọrin from PyPI, ensure the following requirements are
+met:
 
-```bash
+- Python 3.12 or later.
+- `uv` (recommended) or `pip` for package installation.
+
+Oremi Akọrin can be installed either as a standalone command-line application
+or as a Python package.
+
+#### Install with uv
+
+```sh
 uv tool install oremi-akorin
 ```
 
-### PyPI with pip
+#### Install with pip
 
-```bash
+```sh
 python -m pip install oremi-akorin
 ```
 
-## Deployment
+#### Usage
+
+```text
+oremi-akorin [-h] [-v]
+```
+
+When started without arguments, Oremi Akọrin launches the HTTP server using the
+configured environment variables.
+
+#### Options
+
+- `-h`, `--help`: Display the command-line help and exit.
+- `-v`, `--version`: Display the installed version and exit.
+
+All server configuration, including the listening address, port, LLM backend,
+and service endpoints, is provided through environment variables rather than
+command-line options.
 
 ### Docker Image
 
@@ -304,20 +330,30 @@ OREMI_AKORIN_MQTT_BROKER=test.mosquitto.org
 OREMI_AKORIN_LOG_LEVEL=INFO
 ```
 
-## Command Line
+## Oremi Service Dependencies
 
-```text
-oremi-akorin [-h] [-v]
-```
+Oremi Akọrin can operate as a standalone conversational assistant, but its
+capabilities expand significantly when connected to other Oremi services.
 
-| Command or option | Description                                                                            |
-| ----------------- | -------------------------------------------------------------------------------------- |
-| no command        | Start the HTTP server using `OREMI_AKORIN_SERVER_HOST` and `OREMI_AKORIN_SERVER_PORT`. |
-| `-h`, `--help`    | Show command help.                                                                     |
-| `-v`, `--version` | Show the installed version.                                                            |
+- **Oremi Isinmi Agent** – Alarm, timer, reminder, and calendar management.
+  Handles scheduling requests and other time-based personal assistant tasks.
+  Documentation: https://demsking.gitlab.io/oremi-isinmi-agent
 
-Server options are configured through environment variables rather than CLI
-flags.
+- **Oremi Weather Agent** – Weather forecasts, current conditions, air quality,
+  pollen information, geocoding, and weather alerts.
+  Documentation: https://demsking.gitlab.io/oremi-weather-agent
+
+- **Oremi Rediyo Agent** – Natural-language access to internet radio stations,
+  allowing users to search for and play radio streams.
+  Documentation: https://demsking.gitlab.io/oremi-rediyo-agent
+
+- **Oremi Kansa Agent** – Natural-language search and discovery of podcasts,
+  including podcast metadata and episode information.
+  Documentation: https://demsking.gitlab.io/oremi-kansa-agent
+
+- **MQTT Broker** – Optional. Enables communication with Oremi Device nodes,
+  allowing Akọrin to publish commands and receive events from microphones,
+  speakers, and other MQTT-enabled devices.
 
 ## Routing and Services
 
