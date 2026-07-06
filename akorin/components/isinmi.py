@@ -1,0 +1,55 @@
+# Copyright 2026 Sébastien Demanou. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+from typing import Any
+
+from pydantic import BaseModel
+
+from .base import ComponentClient
+
+
+class IsinmiServerHealth(BaseModel):
+  status: str
+  app: str
+  version: str
+  llm_model: str
+
+
+ServerHealth = IsinmiServerHealth
+
+
+class AgentChatRequest(BaseModel):
+  message: str
+  context: dict[str, Any]
+  tags: list[str]
+
+
+class IsinmiClient(ComponentClient):
+  endpoint_path = "/api/agent/chat"
+  server_path = "/health/"
+  server_info_model = IsinmiServerHealth
+
+  async def process(self, message: str, language: str, context: dict[str, Any], tags: list[str]) -> tuple[str, Any]:
+    payload = AgentChatRequest(
+      message=message,
+      context=context,
+      tags=tags,
+    )
+
+    data = await self.request_json(
+      method="POST",
+      json=payload.model_dump(),
+    )
+
+    return self.parse_response(data)

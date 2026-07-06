@@ -1,9 +1,9 @@
 {
-  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
-  "pylint.importStrategy": "fromEnvironment",
-  "editor.formatOnPaste": false,
-  "editor.formatOnSave": true,
-  "editor.formatOnType": true,
+  "editor.detectIndentation": false,
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
   "files.trimTrailingWhitespace": true,
   "files.exclude": {
     "**/.devbox": true,
@@ -17,39 +17,30 @@
     "**/__pycache__": true,
     "**/dist": true
   },
-  "python.analysis.typeCheckingMode": "basic",
-  "python.analysis.diagnosticSeverityOverrides": {
-    "reportMissingTypeStubs": "information",
-    "reportPrivateImportUsage": "none"
-  },
-  "python.analysis.exclude": [
-    ".venv/**"
-  ],
-  "python.analysis.autoImportCompletions": true,
-  "python.analysis.completeFunctionParens": true,
-  "python.analysis.diagnosticMode": "workspace",
-  "python.analysis.importFormat": "relative",
-  "python.analysis.inlayHints.functionReturnTypes": true,
-  "python.analysis.inlayHints.pytestParameters": true,
-  "python.analysis.inlayHints.variableTypes": true,
-  "python.analysis.fixAll": [
-    "source.convertImportFormat"
-  ],
-  "python.terminal.useEnvFile": true,
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+  "python.envFile": "${workspaceFolder}/.env.example",
   "python.testing.pytestEnabled": true,
-  "python.testing.pytestArgs": [
-    "tests"
-  ],
-  "python.testing.unittestEnabled": false,
+  "python.testing.unittestEnabled": true,
   "python.terminal.activateEnvInCurrentTerminal": true,
-  "terminal.integrated.profiles.linux": {
-    "bash": {
-      "path": "/bin/bash"
-    }
-  },
-  "terminal.integrated.defaultProfile.linux": "bash",
   "[python]": {
-    "editor.defaultFormatter": "charliermarsh.ruff"
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2
   },
-  "python-envs.defaultEnvManager": "ms-python.python:system"
+  "[json]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2
+  },
+  "[yaml]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2
+  },
+  "[dockerfile]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2
+  },
+  "[makefile]": {
+    "editor.insertSpaces": false
+  }
 }

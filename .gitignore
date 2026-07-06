@@ -8,6 +8,7 @@ __pycache__/
 .nix-node/
 .directory
 .coverage
-*.tflite
+*.log
+*.log.*
 .direnv/
 build/

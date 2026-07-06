@@ -21,7 +21,7 @@ For detailed information on setting up your development environment, running
 tests, code style guidelines, and the pull request process, please refer to
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Versioning
+,## Versioning
 
 This project adheres to [Semantic Versioning](https://semver.org/) (SemVer).
 Version numbers follow the `MAJOR.MINOR.PATCH` format:

@@ -12,41 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-import os
 import sys
 import tomllib
 
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-_pyproject_path = os.path.join(_current_dir, "..", "pyproject.toml")
-
-with open(_pyproject_path, "rb") as file:
-  project = tomllib.load(file)["project"]
-
-key = sys.argv[1]
-
-if key == "authors":
-  value = []
-
-  for author in project.get("authors", []):
-    if "name" in author and "email" in author:
-      value.append(f"{author['name']} <{author['email']}>")
-    elif "name" in author:
-      value.append(author["name"])
-    elif "email" in author:
-      value.append(author["email"])
-elif key == "license":
-  license_info = project.get("license", {})
-
-  if isinstance(license_info, dict):
-    value = license_info.get("text", license_info.get("file", ""))
-  else:
-    value = license_info
-elif key == "repository":
-  value = project.get("urls", {}).get("Source", "")
-elif key == "documentation":
-  value = project.get("urls", {}).get("Documentation", "")
-else:
-  value = project.get(key, "")
+with open("pyproject.toml", "rb") as file:
+  value = tomllib.load(file)["project"][sys.argv[1]]
 
 if isinstance(value, list):
   value = ", ".join(value)

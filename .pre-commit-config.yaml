@@ -6,125 +6,108 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        name: 'Trailing Whitespace Remover'
-        description: 'Removes trailing whitespace from all lines.'
-      - id: check-added-large-files
-        name: 'Check for Large Added Files'
-        description: 'Prevents adding files larger than a specified size.'
+        name: "Trailing Whitespace Remover"
+        description: "Removes trailing whitespace from all lines."
       - id: check-ast
-        name: 'Check Python AST'
-        description: 'Verifies Python files parse as valid syntax trees.'
+        name: "Check Python AST"
+        description: "Verifies Python files parse as valid syntax trees."
       - id: check-case-conflict
-        name: 'Check Case Conflict'
-        description: 'Detects files with names that would conflict on a case-insensitive filesystem.'
-      # - id: check-docstring-first
-      - id: check-executables-have-shebangs
-        name: 'Check Executables for Shebangs'
-        description: 'Ensures that executable files have a valid shebang.'
+        name: "Check Case Conflict"
+        description: "Detects files with names that would conflict on a case-insensitive filesystem."
       - id: check-json
-        name: 'Check JSON Syntax'
-        description: 'Validates JSON files for syntax errors.'
+        name: "Check JSON Syntax"
+        description: "Validates JSON files for syntax errors."
       - id: check-merge-conflict
-        name: 'Check for Merge Conflicts'
-        description: 'Detects merge conflict markers in files.'
+        name: "Check for Merge Conflicts"
+        description: "Detects merge conflict markers in files."
       - id: check-yaml
-        name: 'Check YAML Syntax'
-        description: 'Validates YAML files for syntax errors.'
+        name: "Check YAML Syntax"
+        description: "Validates YAML files for syntax errors."
       - id: check-toml
-        name: 'Check TOML Syntax'
-        description: 'Validates TOML files for syntax errors.'
+        name: "Check TOML Syntax"
+        description: "Validates TOML files for syntax errors."
       - id: debug-statements
-        name: 'Debug Statement Detection'
-        description: 'Checks for debug statements (e.g., print, pdb) in Python files.'
+        name: "Debug Statement Detection"
+        description: "Checks for debug statements (e.g., print, pdb) in Python files."
       - id: detect-private-key
-        name: 'Detect Private Keys'
-        description: 'Prevents committing files that appear to contain private keys.'
-      - id: name-tests-test
-      - id: requirements-txt-fixer
-        name: 'Requirements.txt Fixer'
-        description: 'Sorts entries in requirements.txt files and removes duplicates.'
+        name: "Detect Private Keys"
+        description: "Prevents committing files that appear to contain private keys."
 
   - repo: https://github.com/Lucas-C/pre-commit-hooks
     rev: v1.5.6
     hooks:
       - id: insert-license
-        name: 'Insert License Header'
-        description: 'Inserts license headers into Python files.'
+        name: "Insert License Header"
+        description: "Inserts license headers into Python files."
         files: \.py$
         args:
           [
-            '--license-filepath',
-            'LICENSE_HEADER.txt',
-            '--comment-style',
-            '',
-            '--use-current-year',
-            '--no-extra-eol',
+            "--license-filepath",
+            "LICENSE_HEADER.txt",
+            "--comment-style",
+            "",
+            "--use-current-year",
+            "--no-extra-eol",
           ]
 
   - repo: https://github.com/asottile/reorder-python-imports
     rev: v3.16.0
     hooks:
       - id: reorder-python-imports
-        name: 'Reorder Python Imports'
-        description: 'Automatically sorts and groups Python imports.'
+        name: "Reorder Python Imports"
+        description: "Automatically sorts and groups Python imports."
 
   - repo: https://github.com/pycqa/pylint
     rev: v4.0.6
     hooks:
       - id: pylint
-        name: 'Lint Python Code with Pylint'
-        description: 'Lint Python code using `pylint`, focusing on error messages only.'
+        name: "Lint Python Code with Pylint"
+        description: "Lint Python code using `pylint`, focusing on error messages only."
         entry: pylint
         language: system
         # The HA integration shares the application package name and requires
         # Home Assistant's Python environment, which is unavailable here.
-        exclude: ^integrations/
+        exclude: ^(integrations|scripts)/
 
   - repo: local
     hooks:
       - id: hadolint
-        name: 'Dockerfile Linting'
-        description: 'Runs `hadolint` to lint Dockerfiles.'
+        name: "Dockerfile Linting"
+        description: "Runs `hadolint` to lint Dockerfiles."
         entry: hadolint
         language: system
         files: Dockerfile
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.15.17
+    rev: v0.15.20
     hooks:
       - id: ruff
-        name: 'Ruff Linter'
-        description: 'Runs Ruff, an extremely fast Python linter.'
+        name: "Ruff Linter"
+        description: "Runs Ruff, an extremely fast Python linter."
+        args: [--fix]
 
   - repo: https://github.com/pre-commit/pygrep-hooks
     rev: v1.10.0
     hooks:
       - id: python-check-mock-methods
-        name: 'Check Mock Methods'
-        description: 'Ensures correct usage of mock methods in tests.'
+        name: "Check Mock Methods"
+        description: "Ensures correct usage of mock methods in tests."
       - id: python-no-eval
-        name: 'Disallow Python eval'
-        description: 'Prevents use of the dangerous `eval` function in Python.'
+        name: "Disallow Python eval"
+        description: "Prevents use of the dangerous `eval` function in Python."
       - id: python-no-log-warn
-        name: 'Disallow Deprecated log.warn'
-        description: 'Prevents use of deprecated `log.warn` in favor of `log.warning`.'
+        name: "Disallow Deprecated log.warn"
+        description: "Prevents use of deprecated `log.warn` in favor of `log.warning`."
       - id: python-use-type-annotations
-        name: 'Enforce Type Annotations'
-        description: 'Ensures Python functions and methods use type annotations.'
+        name: "Enforce Type Annotations"
+        description: "Ensures Python functions and methods use type annotations."
 
   - repo: https://github.com/PyCQA/bandit
     rev: 1.9.4
     hooks:
       - id: bandit
-        name: 'Bandit Security Linter'
-        description: 'Runs Bandit to find common security issues in Python code.'
+        name: "Bandit Security Linter"
+        description: "Runs Bandit to find common security issues in Python code."
         language_version: python3
         types: [python]
         args: [-c, bandit.yaml]
-
-  - repo: https://github.com/PyCQA/doc8
-    rev: v2.0.0
-    hooks:
-      - id: doc8
-        name: 'Doc8 Documentation Linter'
-        description: 'Runs Doc8 to check for style issues in documentation files.'

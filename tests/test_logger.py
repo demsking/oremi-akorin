@@ -3,8 +3,7 @@ import logging
 import httpx
 import pytest
 
-from oremi_akorin.core.logger import DebugTracebackFilter
-from oremi_akorin.utils.http_logging import enable_http_request_logging
+from akorin.utils.logger import DebugTracebackFilter
 
 
 def test_uvicorn_traceback_filter_hides_traceback_outside_debug():
@@ -37,8 +36,6 @@ async def test_http_request_debug_trace_includes_options_and_redacts_secrets(cap
   async with httpx.AsyncClient(
     transport=httpx.MockTransport(lambda request: httpx.Response(200)),
   ) as client:
-    enable_http_request_logging(client)
-
     with caplog.at_level(logging.DEBUG, logger="oremi-akorin"):
       await client.get(
         "https://user:password@weather.test/api/climate",

@@ -1,9 +1,9 @@
 import httpx
 import pytest
 
-from oremi_akorin.core.exceptions import NoResultFound
-from oremi_akorin.services.wikipedia import USER_AGENT
-from oremi_akorin.services.wikipedia import WikipediaService
+from akorin.core.exceptions import NoResultFound
+from akorin.services.wikipedia import USER_AGENT
+from akorin.services.wikipedia import WikipediaService
 
 
 @pytest.mark.asyncio

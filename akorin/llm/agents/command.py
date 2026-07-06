@@ -1,0 +1,68 @@
+# Copyright 2026 Sébastien Demanou. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+from __future__ import annotations
+
+from typing import Any
+
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic_ai import Agent
+from pydantic_ai import AgentModelSettings
+
+from ...core.constants import Service
+from ..agent import AgentClient
+
+
+SYSTEM_PROMPT = (
+  "You are a request router.\n\n"
+  "Return only valid JSON matching this schema:\n"
+  '{"service":"<service>","confidence":<0-1>}\n\n'
+  "Valid services:\n"
+  "- isinmi: reminders, alarms, timers, calendar, scheduling.\n"
+  "- weather: weather, forecast, temperature, air quality, pollen, alerts.\n"
+  "- rediyo: radio stations.\n"
+  "- kansa: podcasts.\n"
+  "- zigbee: smart home and Zigbee devices.\n"
+  "- wikipedia: history, biographies, places, science, definitions, encyclopedic knowledge.\n"
+  "- search: recent news, current events, live information, or explicit web searches.\n"
+  "- chat: everything else, including current time, current date, or current day.\n\n"
+  "Return nothing except the JSON object."
+)
+
+
+class RouteDecision(BaseModel):
+  service: Service
+  confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+
+
+class CommandAgent(AgentClient[RouteDecision]):
+  def _create_agent(self) -> Any:
+    return Agent(
+      model=self.model,
+      system_prompt=SYSTEM_PROMPT,
+      output_type=RouteDecision,
+      model_settings=self._build_router_model_settings(),
+    )
+
+  async def classify(self, message: str) -> RouteDecision:
+    return await self._run(message)
+
+  def _build_router_model_settings(self) -> AgentModelSettings:
+    model_settings: Any = self._build_model_settings(self.settings)
+    model_settings["temperature"] = 0
+    model_settings["seed"] = 0
+    model_settings["max_tokens"] = 80
+
+    return model_settings

@@ -1,22 +1,26 @@
 import json
+import asyncio
+from typing import Any
 
 import httpx
 import pytest
+from pydantic import BaseModel
 
-from oremi_akorin.components.isinmi import IsinmiClient
-from oremi_akorin.components.kansa import KansaClient
-from oremi_akorin.components.rediyo import RediyoClient
-from oremi_akorin.components.weather import WeatherAlertsClient
-from oremi_akorin.components.weather import WeatherClient
-from oremi_akorin.components.zigbee import DEVICES_TOPIC
-from oremi_akorin.components.zigbee import ORIGINAL_TEXT_CONTEXT_KEY
-from oremi_akorin.components.zigbee import ZigbeeComponent
-from oremi_akorin.core.constants import Service
+from akorin.components.isinmi import IsinmiClient
+from akorin.components.isinmi import ServerHealth
+from akorin.components.kansa import KansaClient
+from akorin.components.rediyo import RediyoClient
+from akorin.components.weather import WeatherClient
+from akorin.components.base import monitor_unavailable_components
+from akorin.components.zigbee import DEVICES_TOPIC
+from akorin.components.zigbee import ORIGINAL_TEXT_CONTEXT_KEY
+from akorin.components.zigbee import ZigbeeComponent
+from akorin.core.constants import Service
 
 
 class FakeMQTTService:
   def __init__(self):
-    self.client = None
+    self.client: Any = None
     self.handlers = {}
 
   def subscribe(self, topic, handler):
@@ -53,7 +57,7 @@ async def test_isinmi_uses_natural_language_request_contract():
       "Rappelle-moi la réunion demain",
       "fr",
       {"timezone": "Europe/Paris"},
-      {"user": "user-id", "device": "device-id"},
+      ["user-id", "device-id"],
     )
 
   assert captured is not None
@@ -67,6 +71,36 @@ async def test_isinmi_uses_natural_language_request_contract():
   }
   assert message == "Rappel créé."
   assert data["action"] == "create"
+
+
+@pytest.mark.asyncio
+async def test_isinmi_service_info_uses_richer_health_model():
+  captured = None
+
+  def handler(request: httpx.Request) -> httpx.Response:
+    nonlocal captured
+    captured = request
+    return httpx.Response(
+      200,
+      json={
+        "status": "healthy",
+        "app": "isinmi",
+        "version": "1.4.0",
+        "llm_model": "ollama:qwen3.5:2b",
+      },
+    )
+
+  async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+    component = IsinmiClient(Service.ISINMI, "http://isinmi.test", client)
+    info = await component.get_service_info()
+
+  assert captured is not None
+  assert captured.url.path == "/health/"
+  assert isinstance(info, ServerHealth)
+  assert info.status == "healthy"
+  assert info.app == "isinmi"
+  assert info.version == "1.4.0"
+  assert info.llm_model == "ollama:qwen3.5:2b"
 
 
 @pytest.mark.asyncio
@@ -84,7 +118,7 @@ async def test_weather_uses_climate_query_contract():
       "Quel temps fait-il à Paris ?",
       "fr",
       {"timezone": "Europe/Paris", "temperature_unit": "fahrenheit"},
-      {},
+      [],
     )
 
   assert captured is not None
@@ -114,14 +148,51 @@ async def test_component_retries_transient_unavailability(first_failure):
 
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
     component = WeatherClient(Service.WEATHER, "http://weather.test", client)
-    message, _ = await component.process("Weather in Paris", "en", {}, {})
+    message, _ = await component.process("Weather in Paris", "en", {}, [])
 
   assert attempts == 2
   assert message == "Sunny"
 
 
 @pytest.mark.asyncio
-async def test_weather_alerts_uses_alert_query_contract():
+async def test_background_monitor_recovers_component_availability():
+  class FlakyAvailabilityComponent:
+    def __init__(self):
+      self.calls = 0
+
+    async def get_service_info(self):
+      self.calls += 1
+      if self.calls == 1:
+        raise RuntimeError("offline")
+
+      class Info(BaseModel):
+        name: str
+        version: str
+
+      return Info(name="weather", version="1.0")
+
+  component = FlakyAvailabilityComponent()
+  statuses = {Service.WEATHER: False}
+  stop_event = asyncio.Event()
+
+  task = asyncio.create_task(
+    monitor_unavailable_components(
+      {Service.WEATHER: component},  # type: ignore[arg-type]
+      statuses,
+      stop_event=stop_event,
+      interval_seconds=0.01,
+    )
+  )
+
+  await asyncio.sleep(0.05)
+  stop_event.set()
+  await task
+
+  assert statuses[Service.WEATHER] is True
+
+
+@pytest.mark.asyncio
+async def test_weather_uses_alert_query_contract():
   captured = None
 
   def handler(request: httpx.Request) -> httpx.Response:
@@ -130,12 +201,12 @@ async def test_weather_alerts_uses_alert_query_contract():
     return httpx.Response(200, json={"message": "Air quality alert."})
 
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    component = WeatherAlertsClient(Service.WEATHER_ALERTS, "http://weather.test", client)
+    component = WeatherClient(Service.WEATHER, "http://weather.test", client)
     await component.process(
       "Are there air quality alerts?",
       "en",
       {"alert_service": "air-quality", "lat": 48.85, "lon": 2.35, "timezone": "Europe/Paris"},
-      {},
+      [],
     )
 
   assert captured is not None
@@ -243,7 +314,7 @@ async def test_zigbee_extracts_device_and_state_from_natural_language():
     "light up the bedroom light",
     "en",
     {ORIGINAL_TEXT_CONTEXT_KEY: "allume la lumiere de la chambre"},
-    {},
+    [],
   )
 
   assert message == "Command sent to Lumière de la chambre."
@@ -273,7 +344,7 @@ async def test_zigbee_uses_context_when_extracting_natural_language_command():
     "turn on the switch",
     "en",
     {"room": "bedroom"},
-    {},
+    [],
   )
 
   assert message == "Command sent to Bedroom switch."

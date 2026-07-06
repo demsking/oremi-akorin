@@ -4,10 +4,10 @@ from datetime import timezone
 
 import pytest
 
-from oremi_akorin.services.tools import DateTimeTool
-from oremi_akorin.services.tools import CalculatorTool
-from oremi_akorin.services.tools import ToolRegistry
-from oremi_akorin.services.tools import UnitConversionTool
+from akorin.services.tools import DateTimeTool
+from akorin.services.tools import CalculatorTool
+from akorin.services.tools import ToolRegistry
+from akorin.services.tools import UnitConversionTool
 
 
 @pytest.mark.asyncio

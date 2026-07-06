@@ -2,11 +2,8 @@ APP_NAME := $(shell python scripts/metadata.py name)
 APP_VERSION := $(shell python scripts/metadata.py version)
 IMAGE_NAME := demsking/$(APP_NAME)
 
-COMPOSE_SERVICES := mosquitto ollama isinmi weather rediyo kansa
+.PHONY: install tests dist clean
 
-.PHONY: all clean build dist
-
-# Start the development environment using tmuxinator
 shell:
 	tmuxinator
 
@@ -14,61 +11,59 @@ stop:
 	tmux kill-session -t $(APP_NAME)
 
 up: pull
-	docker compose -f .devcontainer/workspace.yaml up -d $(COMPOSE_SERVICES) --remove-orphans
+	docker compose up -d --remove-orphans
 
 ps:
-	docker compose -f .devcontainer/workspace.yaml ps $(COMPOSE_SERVICES)
+	docker compose ps
 
 logs:
-	docker compose -f .devcontainer/workspace.yaml logs -f isinmi weather rediyo kansa
+	docker compose logs -f
 
 pull:
-	docker compose -f .devcontainer/workspace.yaml pull $(COMPOSE_SERVICES)
+	docker compose pull
 
 restart:
-	docker compose -f .devcontainer/workspace.yaml restart $(COMPOSE_SERVICES)
+	docker compose restart
 
 down:
-	docker compose -f .devcontainer/workspace.yaml down $(COMPOSE_SERVICES)
+	docker compose down
 
 stats:
-	docker compose -f .devcontainer/workspace.yaml stats
-
-clean:
-	rm -rf dist/ build/
-
-docs:
-	devbox run serve -l 9650 doc/
+	docker compose stats
 
 install:
 	rm -rf .venv
 	devbox run uv venv --python 3.12
 	devbox run uv sync
 
-# Show outdated dependencies using uv
 outdated:
 	devbox run uv pip list --outdated
 
-# Update dev env
 update: pull
 	devbox run uv sync --upgrade
 	devbox update
 	pre-commit autoupdate
 
+tests:
+	uv run pytest tests/ -v
+
+coverage:
+	uv run pytest --cov=server
+
+coverage-html:
+	uv run pytest --cov=server --cov-report=html
+
 lint:
 	pre-commit run --all-files
 
 fix:
-	devbox run ruff check . --fix
+	ruff check . --fix
 
-test:
-	devbox run pytest
-
-coverage:
-	devbox run pytest --cov=oremi_akorin
-
-coverage-html:
-	devbox run pytest --cov=oremi_akorin --cov-report=html
+clean:
+	find . -type d -name "__pycache__" -exec rm -rf {} +
+	find . -type f -name "*.pyc" -delete
+	rm -rf .pytest_cache .coverage htmlcov
+	rm -rf dist/ build/
 
 #
 ## Packaging
@@ -86,6 +81,8 @@ build/context:
 	touch $@
 
 image: build/context
+	@echo "Building $(IMAGE_NAME):$(APP_VERSION)"
+	uv lock
 	docker buildx use $(APP_NAME)
 	docker buildx build . \
 	  --platform linux/amd64,linux/arm64 \
@@ -97,18 +94,22 @@ image: build/context
 	  --label "org.opencontainers.image.description=$(shell python scripts/metadata.py description)" \
 	  --label "org.opencontainers.image.version=$(APP_VERSION)" \
 	  --label "org.opencontainers.image.revision=$(shell git rev-parse HEAD)" \
-	  --label "org.opencontainers.image.authors=$(shell python scripts/metadata.py authors)" \
+	  --label "org.opencontainers.image.authors=Sébastien Demanou <demsking@gmail.com>" \
 	  --label "org.opencontainers.image.created=$(shell date --rfc-3339=seconds)" \
-	  --label "org.opencontainers.image.source=$(shell python scripts/metadata.py repository)" \
-	  --label "org.opencontainers.image.url=$(shell python scripts/metadata.py repository)" \
-	  --label "org.opencontainers.image.documentation=https://demsking.gitlab.io/$(APP_NAME)/" \
-	  --label "org.opencontainers.image.vendor=Oremi" \
+	  --label "org.opencontainers.image.vendor=Sébastien Demanou" \
 	  --label "org.opencontainers.image.licenses=$(shell python scripts/metadata.py license)"
 
+
 image-test:
-	docker build --debug . \
+	uv lock
+	docker build . \
 	  --progress plain \
 	  --tag $(IMAGE_NAME):test
 
-publish: image-test image pypi
+live: image-test
+	docker run -it --rm --env-file .env.example -v ./data:/oremi/data -p 5020:5020 $(IMAGE_NAME):test
+
+publish: image-test
+	git tag v$(APP_VERSION)
+	$(MAKE) pypi image
 	git push --tags origin main

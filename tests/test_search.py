@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from oremi_akorin.services.search import SearchService
+from akorin.services.search import SearchService
 
 
 @pytest.mark.asyncio

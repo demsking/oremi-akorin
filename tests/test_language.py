@@ -1,5 +1,5 @@
-from oremi_akorin.core.constants import Language
-from oremi_akorin.utils.language import detect_language
+from akorin.core.constants import Language
+from akorin.utils.language import detect_language
 
 
 def test_detects_supported_languages():

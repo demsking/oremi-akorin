@@ -3,16 +3,16 @@ import logging
 import httpx
 import pytest
 
-from oremi_akorin.core.constants import Service
-from oremi_akorin.core.models import ProcessRequest
-from oremi_akorin.core.exceptions import ComponentUnavailable
-from oremi_akorin.core.exceptions import ComponentRequestError
-from oremi_akorin.core.exceptions import NoResultFound
-from oremi_akorin.llm.ollama import ChatResult
-from oremi_akorin.services.orchestrator import Orchestrator
-from oremi_akorin.services.orchestrator import heuristic_route
-from oremi_akorin.services.router import rule_route
-from oremi_akorin.services.tools import ToolResult
+from akorin.core.constants import Service
+from akorin.core.models import ProcessRequest
+from akorin.core.exceptions import ComponentUnavailable
+from akorin.core.exceptions import ComponentRequestError
+from akorin.core.exceptions import NoResultFound
+from akorin.llm.agent import ChatResult
+from akorin.services.orchestrator import Orchestrator
+from akorin.services.orchestrator import heuristic_route
+from akorin.services.router import rule_route
+from akorin.services.tools import ToolResult
 
 
 class FakeOllama:
@@ -39,9 +39,12 @@ class FakeOllama:
     raise httpx.ConnectError("offline")
 
   async def chat_with_tools(self, text, language, context, tools):
-    return ChatResult(message="fallback chat", tools=self.tools)
+    message = "discussion de secours" if language == "fr" else "fallback chat"
+    return ChatResult(message=message, tools=self.tools)
 
   async def answer_from_source(self, question, source, language):
+    if language == "fr":
+      return "La capitale de la Chine est Pékin."
     return "The capital of China is Beijing."
 
 
@@ -67,7 +70,7 @@ class FakeResultComponent:
 class FakeIncompleteRequestComponent:
   async def process(self, text, language, context, tags):
     raise ComponentRequestError(
-      "weather_alerts",
+      "weather",
       "context.lat and context.lon are required",
       message_en="Please share a location so I can check alerts for that area.",
       message_fr="Veuillez indiquer un lieu pour que je puisse vérifier les alertes dans cette zone.",
@@ -222,7 +225,7 @@ async def test_incomplete_media_result_falls_back_to_automatic_message_speech():
 async def test_direct_device_controls_bypass_conversational_processing(text, language, command):
   orchestrator = Orchestrator(FakeOllama(), {})
 
-  result = await orchestrator.process(ProcessRequest(text=text, language=language))
+  result = await orchestrator.process(ProcessRequest(message=message, language=language))
 
   assert result.service == Service.DEVICE
   assert result.commands[0].model_dump(mode="json", exclude_none=True) == command
@@ -247,7 +250,7 @@ async def test_processing_emits_correlated_debug_information(caplog):
       ProcessRequest(
         text="Weather in London",
         context={"timezone": "Europe/London"},
-        tags={"user": "private-user-id"},
+        tags=["private-user-id"],
       )
     )
 
@@ -270,7 +273,7 @@ async def test_processing_emits_correlated_debug_information(caplog):
 
 
 @pytest.mark.asyncio
-async def test_non_english_request_is_normalized_in_order_and_response_is_translated(caplog):
+async def test_non_english_request_is_processed_in_original_language(caplog):
   calls = []
 
   class NormalizingOllama(FakeOllama):
@@ -280,13 +283,11 @@ async def test_non_english_request_is_normalized_in_order_and_response_is_transl
 
     async def translate(self, text, source_language, target_language):
       calls.append(("translate", text, source_language, target_language))
-      if target_language == "en":
-        return "What time is it?"
-      return "Il est 14 h 32."
+      return text
 
     async def chat_with_tools(self, text, language, context, tools):
       calls.append(("chat", text, language))
-      return ChatResult(message="It is 2:32 PM.", tools=[])
+      return ChatResult(message="Il est 14 h 32.", tools=[])
 
   orchestrator = Orchestrator(NormalizingOllama(), {})
 
@@ -295,24 +296,18 @@ async def test_non_english_request_is_normalized_in_order_and_response_is_transl
 
   assert calls == [
     ("spellcheck", "quelle heure est il ?", "fr"),
-    ("translate", "Quelle heure est-il ?", "fr", "en"),
-    ("chat", "What time is it?", "en"),
-    ("translate", "It is 2:32 PM.", "en", "fr"),
+    ("chat", "Quelle heure est-il ?", "fr"),
   ]
   assert result.input == "quelle heure est il ?"
   assert result.language.value == "fr"
   assert result.message == "Il est 14 h 32."
   messages = [record.getMessage() for record in caplog.records]
   assert any(
-    "Input translation completed: source_language=fr target_language=en" in message
-    and "source_text='Quelle heure est-il ?' result_text='What time is it?'" in message
+    "Spellcheck completed: language=fr" in message
+    and "source_text='quelle heure est il ?' result_text='Quelle heure est-il ?'" in message
     for message in messages
   )
-  assert any(
-    "Response translation completed: source_language=en target_language=fr" in message
-    and "source_text='It is 2:32 PM.' result_text='Il est 14 h 32.'" in message
-    for message in messages
-  )
+  assert not any("translation completed" in message.casefold() for message in messages)
 
 
 @pytest.mark.asyncio
@@ -331,17 +326,17 @@ async def test_component_failure_message_uses_request_language():
   orchestrator = Orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent(unavailable=True)})
   result = await orchestrator.process(ProcessRequest(text="Météo à Paris", language="fr"))
 
-  assert result.message == "Je ne peux pas obtenir la météo pour le moment. Veuillez réessayer bientôt."
+  assert result.message == "Je ne parviens pas à obtenir la météo actuelle. Veuillez réessayer sous peu."
   assert "offline" not in result.model_dump_json()
 
 
 @pytest.mark.asyncio
 async def test_missing_component_input_returns_help_without_internal_details():
-  orchestrator = Orchestrator(FakeOllama(), {Service.WEATHER_ALERTS: FakeIncompleteRequestComponent()})
+  orchestrator = Orchestrator(FakeOllama(), {Service.WEATHER: FakeIncompleteRequestComponent()})
   result = await orchestrator.process(ProcessRequest(text="Weather alert", language="en"))
 
   assert result.ok is False
-  assert result.service == Service.WEATHER_ALERTS
+  assert result.service == Service.WEATHER
   assert result.message == "Please share a location so I can check alerts for that area."
   assert result.data == {"error": {"type": "more_information_required"}}
   assert "context.lat" not in result.model_dump_json()

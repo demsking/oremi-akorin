@@ -2,37 +2,47 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Local",
+      "name": "Debug",
       "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
       "args": [
-        "oremi_akorin:app",
+        "akorin:app",
         "--reload",
+        "--reload-dir",
+        "akorin",
         "--host",
         "0.0.0.0",
         "--port",
         "5020"
       ],
       "cwd": "${workspaceFolder}",
-      "envFile": "${workspaceFolder}/.env",
-      "justMyCode": true
+      "envFile": "${workspaceFolder}/.env.example",
+      "env": {
+        "OREMI_AKORIN_LOG_LEVEL": "DEBUG",
+        "OREMI_AKORIN_MQTT_BROKER": "ngaoundere",
+        "OREMI_AKORIN_MQTT_PORT": "51883",
+        "OREMI_AKORIN_OLLAMA_BASE_URL": "http://localhost:31434",
+        "OREMI_AKORIN_ISINMI_URL": "http://localhost:37337",
+        "OREMI_AKORIN_WEATHER_URL": "http://localhost:31777",
+        "OREMI_AKORIN_REDIYO_URL": "http://localhost:39170",
+        "OREMI_AKORIN_KANSA_URL": "http://localhost:34940"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
     },
     {
-      "name": "Container",
+      "name": "Pytest",
       "type": "debugpy",
       "request": "launch",
-      "module": "uvicorn",
+      "module": "pytest",
       "args": [
-        "oremi_akorin:app",
-        "--reload",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "5020"
+        "tests",
+        "-v"
       ],
       "cwd": "${workspaceFolder}",
-      "envFile": "${workspaceFolder}/.env",
+      "envFile": "${workspaceFolder}/.env.example",
+      "console": "integratedTerminal",
       "justMyCode": true
     }
   ]

@@ -1,41 +1,52 @@
 #
-## Stage 1: Build environment
-FROM python:3.12-alpine AS install-dependencies-stage
+## Stage 1: Builder
+FROM python:3.12-alpine3.21 AS builder
 
-# Copy the uv binary
+ENV UV_LINK_MODE=copy
+
+# Set the shell to /bin/ash and enable pipefail
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
+
+# Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Copy and install Python dependencies
-WORKDIR /src
-COPY uv.lock pyproject.toml ./
-RUN uv pip install --system --no-cache -r pyproject.toml
+# Change the working directory
+WORKDIR /app
 
+# Install dependencies
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --no-dev --locked --no-install-project --compile-bytecode
 
 #
-## Stage 2: Runtime environment
-FROM python:3.12-alpine
+## Stage 2: Final
+FROM python:3.12-alpine3.21
 
-# Copy built Python dependencies from the install-dependencies-stage stage
-COPY --from=install-dependencies-stage /usr/local/lib/python3.12/site-packages/ /usr/local/lib/python3.12/site-packages/
-COPY --from=install-dependencies-stage /usr/local/bin/ /usr/local/bin/
+# Set the shell to /bin/ash and enable pipefail
+SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
-# Binaries
-COPY bin/* /opt/oremi/bin/
-RUN chmod +x /opt/oremi/bin/*
+RUN apk add --no-cache curl
+RUN adduser -D -h /oremi oremi && mkdir -p /oremi/data
 
-# Copy application files
-COPY pyproject.toml LICENSE /opt/oremi/
-COPY oremi_akorin/ /opt/oremi/oremi_akorin
+WORKDIR /oremi
 
-# Set environment variables
-ENV PATH="/opt/oremi/bin:$PATH"
-ENV PYTHONPATH="/opt/oremi"
+COPY --from=builder /app/.venv /oremi/.venv
+COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+
+COPY --chown=oremi:oremi DOCUMENTATION.md pyproject.toml LICENSE ./
+COPY --chown=oremi:oremi htdocs/ ./htdocs/
+COPY --chown=oremi:oremi akorin/ ./akorin/
+
+ENV PATH="/oremi/.venv/bin:$PATH"
+ENV PYTHONPATH="/oremi:/oremi/.venv/lib/python3.12/site-packages"
 ENV PYTHONUNBUFFERED="1"
 
-ENV LOG_LEVEL="INFO"
-ENV SERVER_HOST="0.0.0.0"
+ENV OREMI_AKORIN_LOG_LEVEL="INFO"
+ENV OREMI_AKORIN_SERVER_HOST="0.0.0.0"
+
+VOLUME /oremi/data
 
 EXPOSE 5020
 
-WORKDIR /opt/oremi
-ENTRYPOINT ["/opt/oremi/bin/entrypoint.sh"]
+CMD ["python", "/oremi/akorin"]

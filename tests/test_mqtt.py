@@ -5,13 +5,13 @@ import paho.mqtt.client as mqtt
 import pytest
 from pydantic import ValidationError
 
-from oremi_akorin.core.settings import Settings
-from oremi_akorin.core.constants import Language
-from oremi_akorin.core.constants import Service
-from oremi_akorin.core.mqtt import MQTTService
-from oremi_akorin.core.models import PlayCommand
-from oremi_akorin.core.models import ProcessResponse
-from oremi_akorin.core.models import SpeakCommand
+from akorin.core.settings import Settings
+from akorin.core.constants import Language
+from akorin.core.constants import Service
+from akorin.core.mqtt import MQTTService
+from akorin.core.models import PlayCommand
+from akorin.core.models import ProcessResponse
+from akorin.core.models import SpeakCommand
 
 
 async def processor(request):
@@ -21,9 +21,8 @@ async def processor(request):
 @pytest.mark.asyncio
 async def test_start_waits_until_mqtt_is_connected(monkeypatch):
   settings = Settings(
-    OLLAMA_PULL_MODEL=False,
-    MQTT_BROKER="mqtt.test",
-    MQTT_PORT=1883,
+    mqtt_broker="mqtt.test",
+    mqtt_port=1883,
   )
   service = MQTTService(settings, processor)
   connection = {}
@@ -53,13 +52,13 @@ async def test_start_waits_until_mqtt_is_connected(monkeypatch):
 
 
 def test_mqtt_broker_scheme_is_removed_for_paho():
-  settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER="mqtt://broker.test")
+  settings = Settings(mqtt_broker="mqtt://broker.test")
 
   assert settings.mqtt_broker == "broker.test"
 
 
 def test_oremi_device_topics_are_derived_from_normalized_base():
-  settings = Settings(OLLAMA_PULL_MODEL=False, OREMI_DEVICE_MQTT_TOPIC=" /house/oremi/ ")
+  settings = Settings(oremi_device_mqtt_topic=" /house/oremi/ ")
 
   assert settings.oremi_device_mqtt_topic == "house/oremi"
   assert settings.mqtt_transcription_topic == "house/oremi/nodes/+/transcription/result"
@@ -68,11 +67,11 @@ def test_oremi_device_topics_are_derived_from_normalized_base():
 
 def test_oremi_device_base_topic_rejects_wildcards():
   with pytest.raises(ValidationError, match="without wildcards"):
-    Settings(OLLAMA_PULL_MODEL=False, OREMI_DEVICE_MQTT_TOPIC="oremi/+/device")
+    Settings(oremi_device_mqtt_topic="oremi/+/device")
 
 
 def test_subscribe_and_unsubscribe_are_logged(caplog):
-  settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
+  settings = Settings(mqtt_broker=None)
   service = MQTTService(settings, processor)
 
   with caplog.at_level(logging.INFO, logger="oremi-akorin"):
@@ -85,7 +84,7 @@ def test_subscribe_and_unsubscribe_are_logged(caplog):
 
 
 def test_mqtt_handler_traceback_is_only_attached_in_debug(caplog):
-  settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
+  settings = Settings(mqtt_broker=None)
   service = MQTTService(settings, processor)
 
   def fail(payload):
@@ -113,7 +112,7 @@ def test_mqtt_handler_traceback_is_only_attached_in_debug(caplog):
 
 @pytest.mark.asyncio
 async def test_mqtt_schedules_async_message_handlers():
-  settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
+  settings = Settings(mqtt_broker=None)
   service = MQTTService(settings, processor)
   service.loop = asyncio.get_running_loop()
   handled = asyncio.Event()
@@ -146,7 +145,7 @@ async def test_processes_final_transcription_and_replies_to_same_node(monkeypatc
       confidence=1,
     )
 
-  settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
+  settings = Settings(mqtt_broker=None)
   service = MQTTService(settings, process)
   published = []
   monkeypatch.setattr(service.client, "publish", lambda *args, **kwargs: published.append((args, kwargs)))
@@ -171,7 +170,7 @@ async def test_processes_final_transcription_and_replies_to_same_node(monkeypatc
   ],
 )
 async def test_invalid_transcription_is_ignored(payload, monkeypatch, caplog):
-  settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
+  settings = Settings(mqtt_broker=None)
   service = MQTTService(settings, processor)
   published = []
   monkeypatch.setattr(service.client, "publish", lambda *args, **kwargs: published.append((args, kwargs)))
@@ -198,7 +197,7 @@ async def test_device_commands_are_forwarded_in_order(monkeypatch):
       ],
     )
 
-  settings = Settings(OLLAMA_PULL_MODEL=False, MQTT_BROKER=None)
+  settings = Settings(mqtt_broker=None)
   service = MQTTService(settings, process)
   published = []
   monkeypatch.setattr(service.client, "publish", lambda *args, **kwargs: published.append((args, kwargs)))

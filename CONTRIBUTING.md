@@ -44,35 +44,7 @@ isolated development environment in VS Code and **Devbox** for consistent
 tooling when working in an external terminal. Follow the steps below to set up
 your environment.
 
-### 1. Using Dev Container (Recommended for Development)
-
-Dev Containers provide a consistent and isolated development environment within
-VS Code.
-
-1. **Install Docker**
-   - Ensure Docker is installed and running on your machine. Download it from
-     [here](https://www.docker.com/products/docker-desktop).
-
-2. **Install VS Code and Dev Container Extension**
-   - Install [VS Code](https://code.visualstudio.com/).
-   - Install the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers).
-
-3. **Open Project in Dev Container**
-   - Open the project in VS Code.
-   - Click on the green "><" icon in the bottom-left corner of VS Code and
-     select **"Reopen in Container"**.
-   - VS Code will build the Dev Container and set up the development
-     environment automatically.
-
-4. **Debugging in VS Code**
-   - The project includes preconfigured debug configurations for both the server
-     and client. These configurations are defined in the `.vscode/launch.json`
-     file.
-   - To use them, open the **Run and Debug** panel in VS Code (Ctrl+Shift+D or
-     Cmd+Shift+D on macOS), select the desired configuration, and click **Start
-     Debugging**.
-
-### 2. Using Devbox (For External Terminal Tooling)
+### Using Devbox
 
 Devbox ensures consistent tooling and dependencies when working outside of VS
 Code, such as in an external terminal.

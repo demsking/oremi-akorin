@@ -1,65 +1,70 @@
-import json
 from datetime import datetime
 from datetime import timezone
 
 import httpx
 import pytest
+from pydantic_ai.messages import ModelResponse
+from pydantic_ai.messages import TextPart
+from pydantic_ai.models.function import AgentInfo
+from pydantic_ai.models.function import FunctionModel
+from pydantic_ai.models.test import TestModel
 
-from oremi_akorin.llm.ollama import OllamaClient
-from oremi_akorin.services.tools import DateTimeTool
-from oremi_akorin.services.tools import ToolRegistry
+from akorin.core.constants import Service
+from akorin.core.settings import Settings
+from akorin.llm.agent import AgentClient
+from akorin.services.tools import DateTimeTool
+from akorin.services.tools import ToolRegistry
+
+
+def isolated_settings() -> Settings:
+  return Settings(llm_model="test", ollama_base_url=None)
 
 
 @pytest.mark.asyncio
 async def test_chat_prompt_forbids_meta_commentary():
-  captured = None
+  captured = ""
 
-  def handler(request: httpx.Request) -> httpx.Response:
+  def handler(messages, info: AgentInfo) -> ModelResponse:
     nonlocal captured
-    captured = json.loads(request.content)
-    return httpx.Response(200, json={"response": "Ça va bien."})
+    captured = str(messages)
+    return ModelResponse(parts=[TextPart("Ça va bien.")])
 
-  async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    ollama = OllamaClient("http://ollama.test/", "qwen2.5:3b", client)
-    response = await ollama.chat("Comment vas-tu ?", "fr", {"mood": "curious"})
+  async with httpx.AsyncClient() as client:
+    agent = AgentClient(isolated_settings(), client, model=FunctionModel(handler))
+    response = await agent.chat("Comment vas-tu ?", "fr", {"mood": "curious"})
 
-  assert captured is not None
   assert response == "Ça va bien."
-  assert "Never include notes" in captured["prompt"]
-  assert 'Context: {"mood":"curious"}' in captured["prompt"]
+  assert "Never include notes" in captured
+  assert 'Context: {"mood":"curious"}' in captured
 
 
 @pytest.mark.asyncio
 async def test_router_generation_is_deterministic():
-  captured = None
+  async with httpx.AsyncClient() as client:
+    agent = AgentClient(
+      isolated_settings(),
+      client,
+      model=TestModel(custom_output_args={"service": "chat", "confidence": 0.8}),
+    )
+    service, confidence = await agent.route("Tell me something interesting", "en")
 
-  def handler(request: httpx.Request) -> httpx.Response:
-    nonlocal captured
-    captured = json.loads(request.content)
-    return httpx.Response(200, json={"response": '{"service":"chat","confidence":0.8}'})
-
-  async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    ollama = OllamaClient("http://ollama.test/", "qwen2.5:3b", client)
-    await ollama.route("Tell me something interesting", "en")
-
-  assert captured["format"] == "json"
-  assert captured["options"] == {"temperature": 0, "seed": 0}
+  assert service == Service.CHAT
+  assert confidence == 0.8
 
 
 @pytest.mark.asyncio
 async def test_spellcheck_and_translation_prompts_return_only_generated_text():
   prompts = []
 
-  def handler(request: httpx.Request) -> httpx.Response:
-    body = json.loads(request.content)
-    prompts.append(body["prompt"])
+  def handler(messages, info: AgentInfo) -> ModelResponse:
+    prompts.append(str(messages))
     response = "Quelle heure est-il ?" if len(prompts) == 1 else "What time is it?"
-    return httpx.Response(200, json={"response": response})
+    return ModelResponse(parts=[TextPart(response)])
 
-  async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    ollama = OllamaClient("http://ollama.test/", "qwen2.5:3b", client)
-    corrected = await ollama.spellcheck("quelle heure est il ?", "fr")
-    translated = await ollama.translate(corrected, "fr", "en")
+  async with httpx.AsyncClient() as client:
+    agent = AgentClient(isolated_settings(), client, model=FunctionModel(handler))
+    corrected = await agent.spellcheck("quelle heure est il ?", "fr")
+    translated = await agent.translate(corrected, "fr", "en")
 
   assert corrected == "Quelle heure est-il ?"
   assert translated == "What time is it?"
@@ -68,64 +73,44 @@ async def test_spellcheck_and_translation_prompts_return_only_generated_text():
 
 
 @pytest.mark.asyncio
-async def test_native_ollama_tool_call_loop():
-  requests = []
-
-  def handler(request: httpx.Request) -> httpx.Response:
-    body = json.loads(request.content)
-    requests.append(body)
-    if len(requests) == 1:
-      return httpx.Response(
-        200,
-        json={
-          "message": {
-            "role": "assistant",
-            "content": "",
-            "tool_calls": [
-              {
-                "type": "function",
-                "function": {"name": "get_current_datetime", "arguments": {}},
-              }
-            ],
-          }
-        },
-      )
-    return httpx.Response(200, json={"message": {"role": "assistant", "content": "Il est 14 h 32."}})
-
+async def test_pydantic_ai_tool_call_records_tool_result():
   current = datetime(2026, 6, 20, 14, 32, tzinfo=timezone.utc)
   tools = ToolRegistry([DateTimeTool(clock=lambda: current)])
-  async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    ollama = OllamaClient("http://ollama.test/", "qwen2.5:3b", client)
-    result = await ollama.chat_with_tools("Quelle heure est-il ?", "fr", {"timezone": "Europe/Paris"}, tools)
+
+  async with httpx.AsyncClient() as client:
+    agent = AgentClient(
+      isolated_settings(),
+      client,
+      model=TestModel(call_tools=["get_current_datetime"], custom_output_text="Il est 14 h 32."),
+    )
+    result = await agent.chat_with_tools("Quelle heure est-il ?", "fr", {"timezone": "Europe/Paris"}, tools)
 
   assert result.message == "Il est 14 h 32."
   assert result.tools[0].name == "get_current_datetime"
-  assert requests[0]["tools"][0]["function"]["name"] == "get_current_datetime"
-  assert requests[0]["messages"][1]["content"] == 'Quelle heure est-il ?\n\nContext: {"timezone":"Europe/Paris"}'
-  tool_message = requests[1]["messages"][-1]
-  assert tool_message["role"] == "tool"
-  assert tool_message["tool_name"] == "get_current_datetime"
-  assert json.loads(tool_message["content"])["datetime"] == "2026-06-20T16:32:00+02:00"
+  assert result.tools[0].data["datetime"] == "2026-06-20T16:32:00+02:00"
 
 
 @pytest.mark.asyncio
 async def test_grounded_answer_is_constrained_and_deterministic():
-  captured = None
+  captured = ""
+  captured_settings = None
 
-  def handler(request: httpx.Request) -> httpx.Response:
-    nonlocal captured
-    captured = json.loads(request.content)
-    return httpx.Response(200, json={"response": "La capitale de la Chine est Pékin."})
+  def handler(messages, info: AgentInfo) -> ModelResponse:
+    nonlocal captured, captured_settings
+    captured = str(messages)
+    captured_settings = info.model_settings
+    return ModelResponse(parts=[TextPart("La capitale de la Chine est Pékin.")])
 
-  async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    ollama = OllamaClient("http://ollama.test/", "qwen2.5:3b", client)
-    result = await ollama.answer_from_source(
+  async with httpx.AsyncClient() as client:
+    agent = AgentClient(isolated_settings(), client, model=FunctionModel(handler))
+    result = await agent.answer_from_source(
       "Quelle est la capitale de la Chine ?",
       "Pékin est l'actuelle capitale de la république populaire de Chine.",
       "fr",
     )
 
   assert result == "La capitale de la Chine est Pékin."
-  assert captured["options"] == {"temperature": 0, "num_predict": 100}
-  assert "using only the supplied source" in captured["prompt"]
-  assert "at most two short sentences" in captured["prompt"]
+  assert captured_settings["temperature"] == 0
+  assert captured_settings["max_tokens"] == 100
+  assert "using only the supplied source" in captured
+  assert "at most two short sentences" in captured

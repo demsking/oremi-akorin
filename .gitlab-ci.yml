@@ -5,14 +5,23 @@
 # Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
 # Note that environment variables can be set in several places
 # See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
-image: alpine
+image: python:3.12-alpine3.19
 
 stages:
+  # - build
   - test
   - deploy
 
 variables:
+  UV_VERSION: 0.7.3
+  PYTHON_VERSION: 3.12
+  BASE_LAYER: bookworm-slim
+  # GitLab CI creates a separate mountpoint for the build directory,
+  # so we need to copy instead of using hard links.
+  UV_LINK_MODE: copy
+  UV_CACHE_DIR: .uv-cache
   GIT_SUBMODULE_STRATEGY: recursive
+  PYTHONPATH: .:.venv/lib/python3.12/site-packages:$PYTHONPATH
 
 sast:
   stage: test
@@ -22,10 +31,13 @@ include:
 
 pages:
   stage: deploy
-  image: python:alpine
+  image: ghcr.io/astral-sh/uv:$UV_VERSION-python$PYTHON_VERSION-$BASE_LAYER
   script:
-    - mkdir -p public
-    - cp -r doc/* public/
+    - uv sync
+    - mkdir -p public/static/
+    - mv htdocs/* public/static/
+    - python scripts/generate-docs-files.py
+    - cp htdocs/* public/
     - ls -lah public/
     - echo "The documentation site will be deployed to $CI_PAGES_URL"
   artifacts:
