@@ -1,6 +1,6 @@
 [project]
 name = "oremi-akorin"
-version = "1.0.0b2"
+version = "1.0.0b3"
 description = "The Oremi NLP orchestration service for the Oremi ecosystem"
 authors = [{ name = "Sébastien Demanou", email = "demsking@gmail.com" }]
 maintainers = [{ name = "Sébastien Demanou", email = "demsking@gmail.com" }]
