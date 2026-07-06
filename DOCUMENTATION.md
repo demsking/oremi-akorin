@@ -135,7 +135,6 @@ services:
     ports:
       - 5020:5020
     environment:
-      OREMI_AKORIN_SERVER_HOST: 0.0.0.0
       OREMI_AKORIN_OLLAMA_BASE_URL: http://ollama:11434
       OREMI_AKORIN_ISINMI_URL: http://isinmi:7337
       OREMI_AKORIN_WEATHER_URL: http://weather:1777
