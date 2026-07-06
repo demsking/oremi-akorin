@@ -1,9 +1,22 @@
+## Oremi Akọrin
+
 Oremi Akọrin is the natural-language gateway for the Oremi ecosystem.
-It accepts requests over HTTP or MQTT, uses LLM to normalize and classify them,
-and dispatches each request to the appropriate service in the user's original
-language.
+It accepts user requests over HTTP or MQTT, uses a large language model (LLM)
+to understand, normalize, and classify them, then intelligently routes each
+request to the appropriate Oremi service. Whether the request concerns weather,
+reminders, podcasts, radio, smart-home devices, or general conversation,
+Akọrin preserves the user's original language and returns a natural response
+while coordinating the underlying services on their behalf.
+
+The name **Akọrin** comes from the Yoruba language and means **"singer"** or
+**"one who sings."** In the Oremi ecosystem, the name symbolizes a component that
+gives voice to user intent. Rather than performing every task itself, Akọrin
+listens, interprets, and orchestrates communication between specialized services,
+acting as the expressive voice and natural-language entry point of the platform.
 
 Project repository: https://gitlab.com/demsking/oremi-akorin
+
+![Oremi Akọrin Logo](./static/logo.png)
 
 ## Core Capabilities
 
@@ -335,7 +348,7 @@ OREMI_AKORIN_LOG_LEVEL=INFO
 Oremi Akọrin can operate as a standalone conversational assistant, but its
 capabilities expand significantly when connected to other Oremi services.
 
-- **Oremi Isinmi Agent** – Alarm, timer, reminder, and calendar management.
+- **Oremi Akọrin** – Alarm, timer, reminder, and calendar management.
   Handles scheduling requests and other time-based personal assistant tasks.
   Documentation: https://demsking.gitlab.io/oremi-isinmi-agent
 

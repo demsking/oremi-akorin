@@ -3,9 +3,20 @@
 [![Buy me a beer](https://img.shields.io/badge/Buy%20me-a%20beer-1f425f.svg)](https://www.buymeacoffee.com/demsking)
 
 Oremi Akọrin is the natural-language gateway for the Oremi ecosystem.
-It accepts requests over HTTP or MQTT, uses LLM to normalize and classify them,
-and dispatches each request to the appropriate service in the user's original
-language.
+It accepts user requests over HTTP or MQTT, uses a large language model (LLM)
+to understand, normalize, and classify them, then intelligently routes each
+request to the appropriate Oremi service. Whether the request concerns weather,
+reminders, podcasts, radio, smart-home devices, or general conversation,
+Akọrin preserves the user's original language and returns a natural response
+while coordinating the underlying services on their behalf.
+
+The name **Akọrin** comes from the Yoruba language and means **"singer"** or
+**"one who sings."** In the Oremi ecosystem, the name symbolizes a component that
+gives voice to user intent. Rather than performing every task itself, Akọrin
+listens, interprets, and orchestrates communication between specialized services,
+acting as the expressive voice and natural-language entry point of the platform.
+
+![Oremi Akọrin Logo](htdocs/logo.png)
 
 ## Documentation
 
