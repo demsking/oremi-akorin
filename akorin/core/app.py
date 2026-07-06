@@ -26,6 +26,7 @@ from fastapi.responses import JSONResponse
 from ..api import agent
 from ..api import docs
 from ..api import health
+from ..components.base import ComponentClient
 from ..components.base import ensure_components_available
 from ..components.base import monitor_unavailable_components
 from ..components.isinmi import IsinmiClient
@@ -63,48 +64,6 @@ async def _pull_ollama_model(settings: Settings) -> None:
     logger.warning(f"Could not pull Ollama model {settings.resolve_ollama_model_name()}: {exception}")
 
 
-def log_startup_settings(settings: Settings) -> None:
-  logger.info(f"Starting Oremi Akọrin {APP_VERSION}")
-  logger.info("App settings [server]: host=%s port=%s api_prefix=%s", settings.server_host, settings.server_port, settings.api_prefix)
-  logger.info(
-    "App settings [ollama]: model=%s base_url=%s",
-    settings.llm_model,
-    safe_url(settings.ollama_base_url_string if settings.ollama_base_url is not None else None),
-  )
-  logger.info(
-    "App settings [generation]: request_timeout=%s temperature=%s max_response_tokens=%s system_prompt=%s",
-    settings.llm_request_timeout,
-    settings.llm_temperature,
-    settings.max_response_tokens,
-    settings.llm_system_prompt.replace("\n", " ").strip(),
-  )
-  logger.info(
-    "App settings [components]: isinmi=%s weather=%s rediyo=%s kansa=%s",
-    safe_url(settings.isinmi_url),
-    safe_url(settings.weather_url),
-    safe_url(settings.rediyo_url),
-    safe_url(settings.kansa_url),
-  )
-  logger.info(
-    "App settings [mqtt]: enabled=%s broker=%s port=%s client_id=%s authentication_configured=%s tls=%s ca_certificate=%s keepalive=%ss",
-    settings.is_mqtt_enabled,
-    safe_url(settings.mqtt_broker),
-    settings.mqtt_port,
-    settings.mqtt_client_id or "automatic",
-    bool(settings.mqtt_username and settings.mqtt_password),
-    settings.mqtt_tls_enabled,
-    settings.mqtt_tls_ca_cert or "system/default",
-    settings.mqtt_keepalive,
-  )
-  logger.info(
-    "App settings [mqtt topics]: device_base=%s transcription=%s",
-    settings.oremi_device_mqtt_topic,
-    settings.mqtt_transcription_topic,
-  )
-  logger.info("App settings [search]: enabled=%s timeout=%ss", settings.search_enabled, settings.search_timeout)
-  logger.info("App settings [logging]: level=%s destination=%s", settings.log_level, settings.log_file or "stderr")
-
-
 def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None) -> FastAPI:
   @asynccontextmanager
   async def lifespan(app: FastAPI):
@@ -118,7 +77,47 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     logger.info(f"Server: http://{settings.server_host}:{settings.server_port}")
     logger.info(f"API Docs: http://{settings.server_host}:{settings.server_port}/docs")
     logger.info(f"Components: endpoints={service_endpoints}")
-    log_startup_settings(settings)
+
+    logger.info(
+      "App settings [server]: host=%s port=%s api_prefix=%s", settings.server_host, settings.server_port, settings.api_prefix
+    )
+    logger.info(
+      "App settings [ollama]: model=%s base_url=%s",
+      settings.llm_model,
+      safe_url(settings.ollama_base_url_string if settings.ollama_base_url is not None else None),
+    )
+    logger.info(
+      "App settings [generation]: request_timeout=%s temperature=%s max_response_tokens=%s system_prompt=%s",
+      settings.llm_request_timeout,
+      settings.llm_temperature,
+      settings.max_response_tokens,
+      settings.llm_system_prompt.replace("\n", " ").strip(),
+    )
+    logger.info(
+      "App settings [components]: isinmi=%s weather=%s rediyo=%s kansa=%s",
+      safe_url(settings.isinmi_url),
+      safe_url(settings.weather_url),
+      safe_url(settings.rediyo_url),
+      safe_url(settings.kansa_url),
+    )
+    logger.info(
+      "App settings [mqtt]: enabled=%s broker=%s port=%s client_id=%s authentication_configured=%s tls=%s ca_certificate=%s keepalive=%ss",
+      settings.is_mqtt_enabled,
+      safe_url(settings.mqtt_broker),
+      settings.mqtt_port,
+      settings.mqtt_client_id or "automatic",
+      bool(settings.mqtt_username and settings.mqtt_password),
+      settings.mqtt_tls_enabled,
+      settings.mqtt_tls_ca_cert or "system/default",
+      settings.mqtt_keepalive,
+    )
+    logger.info(
+      "App settings [mqtt topics]: device_base=%s transcription=%s",
+      settings.oremi_device_mqtt_topic,
+      settings.mqtt_transcription_topic,
+    )
+    logger.info("App settings [search]: enabled=%s timeout=%ss", settings.search_enabled, settings.search_timeout)
+    logger.info("App settings [logging]: level=%s destination=%s", settings.log_level, settings.log_file or "stderr")
 
     client = http_client or httpx.AsyncClient(timeout=settings.request_timeout)
 
@@ -137,11 +136,12 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       (Service.KANSA, settings.kansa_url, KansaClient),
     )
 
-    components = {
+    components: dict[Service, ComponentClient] = {
       service: component_type(service, str(url), client)
       for service, url, component_type in configured_components
       if url is not None
     }
+
     component_names = [service.value for service in components]
     logger.info(
       f"Services configured: external={component_names or ['none']} "
