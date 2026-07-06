@@ -74,7 +74,7 @@ async def main() -> None:
   await uvicorn.Server(config).serve()
 
 
-if __name__ == "__main__":
+def start():
   try:
     asyncio.run(main())
   except KeyboardInterrupt:
@@ -82,3 +82,7 @@ if __name__ == "__main__":
   except Exception as exception:
     logger.error(f"Oremi Akọrin failed to start: {exception}")
     sys.exit(3)
+
+
+if __name__ == "__main__":
+  start()

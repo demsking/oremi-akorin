@@ -36,6 +36,9 @@ dependencies = [
 "Tracker" = "https://gitlab.com/demsking/oremi-akorin/-/issues"
 "Documentation" = "https://gitlab.com/demsking/oremi-akorin/-/blob/main/README.md"
 
+[project.scripts]
+oremi-akorin = "akorin.__main__:start"
+
 [dependency-groups]
 dev = [
   "httpx>=0.28.0",

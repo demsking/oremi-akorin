@@ -38,6 +38,151 @@ uv tool install oremi-akorin
 python -m pip install oremi-akorin
 ```
 
+## Deployment
+
+### Docker Image
+
+The [`demsking/oremi-akorin`](https://hub.docker.com/r/demsking/oremi-akorin)
+Docker image is officially available on Docker Hub, supporting both
+`linux/amd64` and `linux/arm64` platforms. The image exposes port `5020`, which
+serves the REST API and the interactive documentation.
+
+The interactive documentation can be accessed at `http://localhost:5020/docs`
+and allows testing available endpoints directly from the browser.
+
+### Volumes
+
+Oremi Akọrin is largely stateless and does not require persistent storage for
+normal operation.
+
+The Docker image does not define any persistent volumes. If you configure file
+logging by setting `OREMI_AKORIN_LOG_FILE` to a location inside the container,
+mount a host directory to preserve log files across container recreation.
+
+### Deploy with Docker
+
+Use the official Docker image
+[`demsking/oremi-akorin`](https://hub.docker.com/r/demsking/oremi-akorin)
+to run Oremi Akọrin:
+
+```sh
+docker run -d \
+  --name oremi-akorin \
+  --env-file <path_to_env_file> \
+  -p 5020:5020 \
+  demsking/oremi-akorin
+```
+
+Replace `<path_to_env_file>` with the path to your
+[environment variables](#environment-variables) file containing the desired
+configuration.
+
+### Deploy with Docker Compose
+
+Create a `compose.yaml` file:
+
+```yaml
+services:
+  akorin:
+    image: demsking/oremi-akorin
+    restart: always
+    depends_on:
+      - mosquitto
+      - ollama
+      - isinmi
+      - weather
+      - rediyo
+      - kansa
+    ports:
+      - 5020:5020
+    environment:
+      OREMI_AKORIN_SERVER_HOST: 0.0.0.0
+      OREMI_AKORIN_OLLAMA_BASE_URL: http://ollama:11434
+      OREMI_AKORIN_ISINMI_URL: http://isinmi:7337
+      OREMI_AKORIN_WEATHER_URL: http://weather:1777
+      OREMI_AKORIN_REDIYO_URL: http://rediyo:9170
+      OREMI_AKORIN_KANSA_URL: http://kansa:4940
+      OREMI_AKORIN_MQTT_BROKER: mosquitto
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5020/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0.18
+    restart: always
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+  ollama:
+    image: ollama/ollama
+    restart: always
+    runtime: nvidia
+    volumes:
+      - ~/.ollama:/root/.ollama
+    environment:
+      CUDA_VISIBLE_DEVICES: 0
+
+  isinmi:
+    image: demsking/oremi-isinmi-agent
+    restart: always
+    depends_on:
+      - ollama
+    volumes:
+      - ~/.config/oremi-isinmi-agent:/oremi/data
+    environment:
+      OREMI_ISINMI_OLLAMA_BASE_URL: http://ollama:11434
+      OREMI_ISINMI_DATABASE_ENCRYPTION_KEY: ${OREMI_ISINMI_DATABASE_ENCRYPTION_KEY?Missing required environment variable}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7337/health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  weather:
+    image: demsking/oremi-weather-agent
+    restart: always
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_BASEURL: http://ollama:11434
+
+  rediyo:
+    image: demsking/oremi-rediyo-agent
+    restart: always
+    depends_on:
+      - ollama
+    volumes:
+      - ~/.config/oremi-rediyo-agent:/var/cache/oremi-rediyo-agent
+    environment:
+      OLLAMA_BASEURL: http://ollama:11434
+
+  kansa:
+    image: demsking/oremi-kansa-agent
+    restart: always
+    depends_on:
+      - ollama
+    volumes:
+      - ~/.config/oremi-kansa-agent:/var/cache/oremi-kansa-agent
+    environment:
+      OLLAMA_BASEURL: http://ollama:11434
+```
+
+Start the services with:
+
+```sh
+docker compose up -d
+```
+
+Once started, open the interactive documentation at:
+
+```txt
+http://localhost:35020/docs
+```
+
 ## Configuration
 
 When configuring **Oremi Akọrin**, several environment variables are used to
