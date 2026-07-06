@@ -324,7 +324,7 @@ MQTT support is disabled.
 
 - `OREMI_AKORIN_LOG_LEVEL`: Optional. Defaults to `INFO`. Logging level:
   `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`.
-- `OREMI_AKORIN_LOG_FILE`: Optional. Defaults to `oremi_isinmi.log`. Path to
+- `OREMI_AKORIN_LOG_FILE`: Optional. Defaults to `oremi_akorin.log`. Path to
   the rotating application log file.
 
 ### Example
