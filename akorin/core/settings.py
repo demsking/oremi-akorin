@@ -138,11 +138,6 @@ class Settings(BaseSettings):
     description="MQTT broker password. Optional - only needed if authentication is required.",
   )
 
-  oremi_device_mqtt_topic: str = Field(
-    default="oremi/device",
-    description="Base topic used by Oremi Device nodes.",
-  )
-
   mqtt_keepalive: int = Field(
     default=60,
     ge=10,
@@ -208,27 +203,6 @@ class Settings(BaseSettings):
         raise ValueError("OREMI_AKORIN_MQTT_BROKER must contain only a hostname or IP address")
 
     return value
-
-  @field_validator("oremi_device_mqtt_topic", mode="before")
-  @classmethod
-  def validate_oremi_device_mqtt_topic(cls, value):  # pylint: disable=invalid-name
-    """Normalize the Oremi Device base topic and reject MQTT wildcards."""
-    if isinstance(value, str):
-      value = value.strip().strip("/")
-
-    if not value or "+" in value or "#" in value:
-      raise ValueError("OREMI_AKORIN_OREMI_DEVICE_MQTT_TOPIC must be a non-empty topic without wildcards")
-
-    return value
-
-  @property
-  def mqtt_transcription_topic(self) -> str:
-    """Topic filter for final transcriptions from every Oremi Device node."""
-    return f"{self.oremi_device_mqtt_topic}/nodes/+/transcription/result"
-
-  def mqtt_processing_result_topic(self, node_id: str) -> str:
-    """Response topic for a specific Oremi Device node."""
-    return f"{self.oremi_device_mqtt_topic}/nodes/{node_id}/processing/result"
 
   @field_validator("isinmi_url", "weather_url", "rediyo_url", "kansa_url")
   @classmethod

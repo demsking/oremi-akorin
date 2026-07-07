@@ -108,11 +108,6 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       settings.mqtt_tls_ca_cert or "system/default",
       settings.mqtt_keepalive,
     )
-    logger.info(
-      "App settings [mqtt topics]: device_base=%s transcription=%s",
-      settings.oremi_device_mqtt_topic,
-      settings.mqtt_transcription_topic,
-    )
     logger.info("App settings [logging]: level=%s destination=%s", settings.log_level, settings.log_file or "stderr")
 
     client = http_client or httpx.AsyncClient(timeout=settings.request_timeout)
@@ -144,10 +139,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       f"zigbee={'enabled' if settings.is_mqtt_enabled else 'disabled'}"
     )
 
-    async def _uninitialized_processor(_payload):
-      raise RuntimeError("MQTT processor is not initialized")
-
-    mqtt = MQTTService(settings, _uninitialized_processor)
+    mqtt = MQTTService(settings)
     zigbee = ZigbeeComponent(mqtt, command_selector=zigbee_command_agent.select)
 
     handlers = {
@@ -156,7 +148,6 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     }
 
     orchestrator = Orchestrator(settings, client, handlers)
-    mqtt.processor = orchestrator.process
 
     if components:
       logger.info(f"Checking {len(components)} configured external component(s)")

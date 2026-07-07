@@ -308,9 +308,6 @@ MQTT support is disabled.
   for the MQTT connection.
 - `OREMI_AKORIN_MQTT_TLS_CA_CERT`: Optional. Path to the CA certificate used to
   verify the MQTT broker when TLS is enabled.
-- `OREMI_AKORIN_OREMI_DEVICE_MQTT_TOPIC`: Optional. Defaults to
-  `oremi/device`. Base MQTT topic used by Oremi Device nodes.
-
 ### Logging Settings
 
 - `OREMI_AKORIN_LOG_LEVEL`: Optional. Defaults to `INFO`. Logging level:
@@ -355,9 +352,8 @@ capabilities expand significantly when connected to other Oremi services.
   including podcast metadata and episode information.
   Documentation: https://demsking.gitlab.io/oremi-kansa-agent
 
-- **MQTT Broker** – Optional. Enables communication with Oremi Device nodes,
-  allowing Akọrin to publish commands and receive events from microphones,
-  speakers, and other MQTT-enabled devices.
+- **MQTT Broker** – Optional. Enables Zigbee2MQTT device discovery, cached
+  state updates, and command publishing.
 
 ## Routing and Services
 
@@ -387,29 +383,6 @@ The chat model can call these built-in tools:
 
 Examples include "What is `(18 * 4) + 7`?", "Convert 5 kilometers to miles",
 and "What time is it in Lagos?".
-
-## MQTT API
-
-When MQTT is enabled, Akọrin subscribes to final transcriptions from every
-Oremi Device node:
-
-```bash
-mosquitto_pub -h localhost \
-  -t oremi/device/nodes/living-room/transcription/result \
-  -m '{"text":"Weather in Lagos"}'
-```
-
-Subscribe for that node's processing results:
-
-```bash
-mosquitto_sub -h localhost -t 'oremi/device/nodes/living-room/processing/result'
-```
-
-The response is a non-retained QoS 1 object with a `message` field, ready for
-Oremi Device to speak. Akọrin selects and validates ordered device commands from
-media and scheduling service results. Direct playback, volume, mute, and voice
-requests are also resolved locally without conversational processing. The node
-ID is preserved from the transcription topic.
 
 ## Zigbee2MQTT
 

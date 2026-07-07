@@ -14,17 +14,13 @@
 # ==============================================================================
 import asyncio
 import inspect
-import json
 import logging
 from collections.abc import Awaitable
 from collections.abc import Callable
 from concurrent.futures import Future
 
 import paho.mqtt.client as mqtt
-from pydantic import ValidationError
 
-from ..core.models import ProcessRequest
-from ..core.models import ProcessResponse
 from .settings import Settings
 
 
@@ -32,9 +28,8 @@ logger = logging.getLogger(__name__)
 
 
 class MQTTService:
-  def __init__(self, settings: Settings, processor: Callable[[ProcessRequest], Awaitable[ProcessResponse]]):
+  def __init__(self, settings: Settings):
     self.settings = settings
-    self.processor = processor
     self.loop: asyncio.AbstractEventLoop | None = None
     self.started = False
     self._connection_event = asyncio.Event()
@@ -134,14 +129,10 @@ class MQTTService:
     properties: mqtt.Properties | None,
   ) -> None:
     if reason_code == 0:
-      client.subscribe(self.settings.mqtt_transcription_topic, qos=1)
-
       for topic in self.message_handlers:
         client.subscribe(topic)
 
-      logger.info(
-        f"MQTT connected: transcription_topic={self.settings.mqtt_transcription_topic} handlers={len(self.message_handlers)}"
-      )
+      logger.info(f"MQTT connected: handlers={len(self.message_handlers)}")
       self._signal_connection_result()
     else:
       logger.error(f"MQTT connection failed: {reason_code}")
@@ -170,56 +161,19 @@ class MQTTService:
             future = asyncio.run_coroutine_threadsafe(result, self.loop)  # type: ignore
             future.add_done_callback(lambda completed: self._log_handler_failure(completed, message.topic))
         except Exception as exception:
-          logger.error(f"Could not process MQTT message from {message.topic}: {exception}")
+          logger.error(
+            f"Could not process MQTT message from {message.topic}: {exception}",
+            exc_info=logger.isEnabledFor(logging.DEBUG),
+          )
         return
 
-    if self.loop:
-      future = asyncio.run_coroutine_threadsafe(self._process(message.topic, message.payload), self.loop)
-      future.add_done_callback(lambda completed: self._log_handler_failure(completed, message.topic))
+    logger.debug(f"Ignored MQTT message without handler: topic={message.topic}")
 
   def _log_handler_failure(self, future: Future[None], topic: str) -> None:
     try:
       future.result()
     except Exception as exception:
-      logger.error(f"Could not process MQTT message from {topic}: {exception}")
-
-  async def _process(self, topic: str, payload: bytes) -> None:
-    node_id = self._node_id(topic)
-
-    if not payload.strip():
-      logger.debug(f"Ignored empty MQTT transcription: node={node_id}")
-      return
-
-    try:
-      body = json.loads(payload)
-      request = ProcessRequest.model_validate(body)
-    except (json.JSONDecodeError, UnicodeDecodeError, ValidationError) as exception:
-      logger.warning(f"Ignored invalid MQTT transcription: node={node_id} error={exception}")
-      return
-
-    try:
-      response = await self.processor(request)
-      device_response = {"message": response.message}
-
-      if response.commands:
-        device_response["commands"] = [command.model_dump(mode="json", exclude_none=True) for command in response.commands]  # type: ignore
-
-      output = json.dumps(device_response)
-    except Exception as exc:  # MQTT must always return a response to its caller.
-      logger.error(f"Could not process MQTT request: {exc}")
-      output = json.dumps({"message": str(exc)})
-
-    self.client.publish(self.settings.mqtt_processing_result_topic(node_id), output, qos=1)
-
-  def _node_id(self, topic: str) -> str:
-    prefix = f"{self.settings.oremi_device_mqtt_topic}/nodes/"
-    suffix = "/transcription/result"
-
-    if not topic.startswith(prefix) or not topic.endswith(suffix):
-      raise ValueError(f"Unexpected Oremi Device transcription topic: {topic}")
-
-    node_id = topic[len(prefix) : -len(suffix)]
-    if not node_id or "/" in node_id:
-      raise ValueError(f"Invalid Oremi Device node ID in topic: {topic}")
-
-    return node_id
+      logger.error(
+        f"Could not process MQTT message from {topic}: {exception}",
+        exc_info=logger.isEnabledFor(logging.DEBUG),
+      )
