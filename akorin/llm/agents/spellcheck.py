@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Thinking
 
 from ..agent import AgentClient
 
@@ -40,10 +41,17 @@ class SpellCheckAgent(AgentClient[str]):
       system_prompt=SYSTEM_PROMPT,
       output_type=str,
       model_settings=self.model_settings,
+      capabilities=[Thinking(effort=False)],
     )
 
   def _parse_output(self, output: str) -> str:
     return output.strip()
 
   async def check(self, message: str, language: str) -> str:
-    return await self._run(SPELLCHECK_PROMPT.format(message=message, language=language))
+    prompt = SPELLCHECK_PROMPT.format(message=message, language=language)
+
+    if self.uses_native_ollama:
+      output = await self._run_ollama(prompt, system_prompt=SYSTEM_PROMPT)
+      return self._parse_output(output)
+
+    return await self._run(prompt)

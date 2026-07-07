@@ -169,6 +169,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
 
     orchestrator = Orchestrator(settings, client, handlers)
     mqtt.processor = orchestrator.process
+
     if components:
       logger.info(f"Checking {len(components)} configured external component(s)")
       component_statuses = await ensure_components_available(components)

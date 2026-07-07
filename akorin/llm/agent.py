@@ -25,10 +25,10 @@ from typing import TYPE_CHECKING
 from typing import TypeVar
 
 import httpx
+import ollama
+from pydantic import BaseModel
 from pydantic_ai import Agent
-from pydantic_ai import AgentModelSettings
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.ollama import OllamaProvider
+from pydantic_ai import ModelSettings
 
 from ..core.settings import Settings
 
@@ -48,36 +48,29 @@ class ChatResult:
 class AgentClient(Generic[OutputModel], ABC):
   def __init__(self, settings: Settings, client: httpx.AsyncClient):
     self.settings = settings
-    self.model = self._build_model(settings, client)
-    self.model_settings = self._build_model_settings(settings)
+    self.uses_native_ollama = settings.uses_ollama()
+    self.ollama_model_name = settings.resolve_ollama_model_name() if self.uses_native_ollama else ""
 
-    self.agent = self._create_agent()
+    self.ollama_client = (
+      ollama.AsyncClient(host=settings.ollama_base_url_string, timeout=settings.llm_request_timeout)
+      if self.uses_native_ollama
+      else None
+    )
+
+    self.model_settings = ModelSettings(
+      temperature=settings.llm_temperature,
+      max_tokens=settings.max_response_tokens,
+      timeout=settings.llm_request_timeout,
+      thinking=False,
+    )
+
+    self.model = None if self.uses_native_ollama else AgentClient.build_model(settings, self.model_settings, client)
+    self.agent = None if self.uses_native_ollama else self._create_agent()
 
   @staticmethod
-  def _build_model(settings: Settings, client: httpx.AsyncClient) -> str | OpenAIChatModel:
-    if settings.uses_ollama():
-      from pydantic_ai.models.ollama import OllamaModel  # pylint: disable=import-outside-toplevel
-
-      return OllamaModel(
-        model_name=settings.resolve_ollama_model_name(),
-        provider=OllamaProvider(base_url=f"{settings.ollama_base_url_string}/v1", http_client=client),
-      )
-
+  def build_model(settings: Settings, model_settings: ModelSettings, client: httpx.AsyncClient) -> str:
+    del model_settings, client
     return settings.llm_model
-
-  @staticmethod
-  def _build_model_settings(settings: Settings) -> AgentModelSettings:
-    model_settings: AgentModelSettings = {
-      "temperature": settings.llm_temperature,
-      "max_tokens": settings.max_response_tokens,
-      "timeout": settings.llm_request_timeout,
-      "thinking": False,
-    }
-
-    if settings.uses_ollama():
-      model_settings["extra_body"] = {"think": False}
-
-    return model_settings
 
   @abstractmethod
   def _create_agent(self) -> Agent:
@@ -86,7 +79,61 @@ class AgentClient(Generic[OutputModel], ABC):
   def _parse_output(self, output: OutputModel) -> OutputModel:
     return output
 
+  def _ollama_options(self, model_settings: ModelSettings | None = None) -> dict[str, Any]:
+    settings = model_settings or self.model_settings
+    options: dict[str, Any] = {}
+
+    if (temperature := settings.get("temperature")) is not None:
+      options["temperature"] = temperature
+    if (seed := settings.get("seed")) is not None:
+      options["seed"] = seed
+    if (max_tokens := settings.get("max_tokens")) is not None and max_tokens > 0:
+      options["num_predict"] = max_tokens
+
+    return options
+
+  async def _run_ollama(
+    self,
+    prompt: str,
+    *,
+    system_prompt: str | None,
+    model_settings: ModelSettings | None = None,
+    output_type: type[Any] = str,
+    response_format: str | None = None,
+  ) -> Any:
+    if self.ollama_client is None:
+      raise RuntimeError("Native Ollama client is not configured")
+
+    messages: list[dict[str, str]] = []
+
+    if system_prompt:
+      messages.append({"role": "system", "content": system_prompt})
+
+    messages.append({"role": "user", "content": prompt})
+
+    response = await self.ollama_client.chat(
+      model=self.ollama_model_name,
+      messages=messages,
+      stream=False,
+      think=False,
+      format=response_format,  # pyright: ignore
+      options=self._ollama_options(model_settings),
+    )
+    content = response.message.content or ""
+
+    if isinstance(output_type, type) and issubclass(output_type, BaseModel):
+      return output_type.model_validate_json(content)
+
+    return content
+
   async def _run(self, prompt: str) -> OutputModel:
+    if self.uses_native_ollama:
+      output = await self._run_ollama(prompt, system_prompt=None)
+      return self._parse_output(output)
+
+    if self.agent is None:
+      raise RuntimeError("Pydantic AI agent is not configured")
+
     result: Any = await self.agent.run(prompt)
 
     return self._parse_output(result.output)

@@ -85,7 +85,7 @@ class ProcessRequest(BaseModel):
   tags: list[str] = Field(
     default_factory=list,
     description=(
-      "Optional key-value tags for request categorization and filtering.\n\n"
+      "Optional tags for request categorization and filtering.\n\n"
       "Tags are free-form client grouping keys used to organize and filter records"
       "across the application. They are stored as normalized JSON arrays and can be"
       "attached to reminders, events, notifications, and chat requests.\n\n"

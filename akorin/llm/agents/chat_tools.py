@@ -21,6 +21,7 @@ from inspect import Signature
 from typing import Any
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Thinking
 
 from ...services.tools import ToolRegistry
 from ...services.tools import ToolResult
@@ -37,7 +38,7 @@ class ChatResult:
 
 class ChatToolsAgent(AgentClient[str]):
   def _create_agent(self) -> Agent:
-    return Agent(model=self.model)
+    return Agent(model=self.model, capabilities=[Thinking(effort=False)])
 
   async def chat(
     self,
@@ -47,6 +48,46 @@ class ChatToolsAgent(AgentClient[str]):
     tools: ToolRegistry,
   ) -> ChatResult:
     executed_tools: list[ToolResult] = []
+
+    if self.uses_native_ollama:
+      if self.ollama_client is None:
+        raise RuntimeError("Native Ollama client is not configured")
+
+      prompt = CHAT_PROMPT.format(message=message, language=language, context=request_context(context) or "{}")
+      messages: list[dict[str, Any]] = [
+        {"role": "system", "content": self.settings.llm_system_prompt},
+        {"role": "user", "content": prompt},
+      ]
+      response = await self.ollama_client.chat(
+        model=self.ollama_model_name,
+        messages=messages,
+        tools=tools.definitions,
+        stream=False,
+        think=False,
+        options=self._ollama_options(),
+      )
+      tool_calls = response.message.tool_calls or []
+
+      if not tool_calls:
+        return ChatResult(message=(response.message.content or "").strip(), tools=executed_tools)
+
+      messages.append(response.message.model_dump(exclude_none=True))
+
+      for tool_call in tool_calls:
+        result = await tools.execute(tool_call.function.name, dict(tool_call.function.arguments), context)
+        executed_tools.append(result)
+        messages.append({"role": "tool", "tool_name": result.name, "content": result.as_message_content()})
+
+      final_response = await self.ollama_client.chat(
+        model=self.ollama_model_name,
+        messages=messages,
+        stream=False,
+        think=False,
+        options=self._ollama_options(),
+      )
+
+      return ChatResult(message=(final_response.message.content or "").strip(), tools=executed_tools)
+
     agent_tools = [self._build_tool_function(name, context, tools, executed_tools) for name in tools.tools]
 
     agent = Agent(
@@ -55,6 +96,7 @@ class ChatToolsAgent(AgentClient[str]):
       output_type=str,
       model_settings=self.model_settings,
       tools=agent_tools,
+      capabilities=[Thinking(effort=False)],
     )
 
     prompt = CHAT_PROMPT.format(message=message, language=language, context=request_context(context) or "{}")

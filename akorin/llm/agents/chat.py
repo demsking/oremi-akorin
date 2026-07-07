@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Thinking
 
 from ...utils.request_context import request_context
 from ..agent import AgentClient
@@ -37,12 +38,17 @@ class ChatAgent(AgentClient[str]):
       system_prompt=self.settings.llm_system_prompt,
       output_type=str,
       model_settings=self.model_settings,
+      capabilities=[Thinking(effort=False)],
     )
 
   def _parse_output(self, output: str) -> str:
     return output.strip()
 
   async def chat(self, message: str, language: str, context: dict[str, Any]) -> str:
-    return await self._run(
-      CHAT_PROMPT.format(message=message, language=language, context=request_context(context) or "{}"),
-    )
+    prompt = CHAT_PROMPT.format(message=message, language=language, context=request_context(context) or "{}")
+
+    if self.uses_native_ollama:
+      output = await self._run_ollama(prompt, system_prompt=self.settings.llm_system_prompt)
+      return self._parse_output(output)
+
+    return await self._run(prompt)

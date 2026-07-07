@@ -14,10 +14,9 @@
 # ==============================================================================
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic_ai import Agent
-from pydantic_ai import AgentModelSettings
+from pydantic_ai import ModelSettings
+from pydantic_ai.capabilities import Thinking
 
 from ..agent import AgentClient
 
@@ -33,12 +32,25 @@ Answer:"""
 
 
 class AnswerAgent(AgentClient[str]):
+  answer_model_settings: ModelSettings
+
+  def _answer_model_settings(self) -> ModelSettings:
+    return ModelSettings(
+      temperature=0,
+      max_tokens=100,
+      timeout=self.settings.llm_request_timeout,
+      thinking=False,
+    )
+
   def _create_agent(self) -> Agent:
+    self.answer_model_settings = self._answer_model_settings()
+
     return Agent(
       model=self.model,
       system_prompt=self.settings.llm_system_prompt,
       output_type=str,
-      model_settings=self._build_model_settings_for_answer(),
+      model_settings=self.answer_model_settings,
+      capabilities=[Thinking(effort=False)],
     )
 
   def _parse_output(self, output: str) -> str:
@@ -51,11 +63,12 @@ class AnswerAgent(AgentClient[str]):
       language=language,
     )
 
+    if self.uses_native_ollama:
+      output = await self._run_ollama(
+        prompt,
+        system_prompt=self.settings.llm_system_prompt,
+        model_settings=getattr(self, "answer_model_settings", self._answer_model_settings()),
+      )
+      return self._parse_output(output)
+
     return await self._run(prompt)
-
-  def _build_model_settings_for_answer(self) -> AgentModelSettings:
-    model_settings: Any = self._build_model_settings(self.settings)
-    model_settings["temperature"] = 0
-    model_settings["max_tokens"] = 100
-
-    return model_settings

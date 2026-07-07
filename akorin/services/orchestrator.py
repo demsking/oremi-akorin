@@ -72,63 +72,26 @@ def heuristic_route(text: str) -> tuple[Service, float]:
 class Orchestrator:
   def __init__(
     self,
-    settings: Settings | Any,
-    client: httpx.AsyncClient | dict[Service, Any],
-    handlers: dict[Service, Any] | None = None,
+    settings: Settings,
+    client: httpx.AsyncClient,
+    handlers: dict[Service, Any],
     tools: ToolRegistry | None = None,
   ):
-    if handlers is None and isinstance(client, dict):
-      self.legacy_agent = settings
-      self.handlers = client
-      self.tools = tools if tools is not None else ToolRegistry()
-      self.chat_agent = None
-      self.chat_tools_agent = None
-      self.answer_agent = None
-      self.command_agent = None
-      self.spellcheck_agent = None
-      return
-
-    self.legacy_agent = None
-    assert handlers is not None
-    assert isinstance(settings, Settings)
-    assert isinstance(client, httpx.AsyncClient)
-
     self.handlers = handlers
-    self.tools = tools if tools is not None else ToolRegistry()
+    self.tools = tools or ToolRegistry()
     self.chat_agent = ChatAgent(settings, client)
     self.chat_tools_agent = ChatToolsAgent(settings, client)
     self.answer_agent = AnswerAgent(settings, client)
     self.command_agent = CommandAgent(settings, client)
     self.spellcheck_agent = SpellCheckAgent(settings, client)
 
-  async def _spellcheck(self, message: str, language: str) -> str:
-    if self.legacy_agent is not None:
-      return await self.legacy_agent.spellcheck(message, language)
-
-    assert self.spellcheck_agent is not None
-    return await self.spellcheck_agent.check(message, language)
-
   async def _route(self, message: str, language: str) -> tuple[Service, float]:
-    if self.legacy_agent is not None:
-      return await self.legacy_agent.route(message, language)
-
-    assert self.command_agent is not None
     decision = await self.command_agent.classify(message)
+
     return decision.service, decision.confidence
 
   async def _chat_with_tools(self, message: str, language: str, context: dict[str, Any]) -> Any:
-    if self.legacy_agent is not None:
-      return await self.legacy_agent.chat_with_tools(message, language, context, self.tools)
-
-    assert self.chat_tools_agent is not None
     return await self.chat_tools_agent.chat(message, language, context, self.tools)
-
-  async def _answer_from_source(self, question: str, source: str, language: str) -> str:
-    if self.legacy_agent is not None:
-      return await self.legacy_agent.answer_from_source(question, source, language)
-
-    assert self.answer_agent is not None
-    return await self.answer_agent.answer(question, source, language)
 
   async def process(self, request: ProcessRequest) -> ProcessResponse:
     request_id = uuid4().hex[:8]
@@ -161,7 +124,7 @@ class Orchestrator:
     normalization_started = perf_counter()
 
     try:
-      processing_message = await self._spellcheck(request.message, language.value)
+      processing_message = await self.spellcheck_agent.check(request.message, language.value)
 
       logger.debug(
         f"[{request_id}] Spellcheck completed: language={language.value} input_chars={len(request.message)} "
@@ -249,7 +212,7 @@ class Orchestrator:
           synthesis_started = perf_counter()
 
           try:
-            message = await self._answer_from_source(processing_message, message, processing_language.value)
+            message = await self.answer_agent.answer(processing_message, message, processing_language.value)
           except httpx.HTTPError as exception:
             raise ComponentUnavailable(Service.WIKIPEDIA, str(exception)) from exception
 

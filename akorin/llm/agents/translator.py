@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 from pydantic_ai import Agent
+from pydantic_ai.capabilities import Thinking
 
 from ..agent import AgentClient
 
@@ -39,16 +40,21 @@ class TranslatorAgent(AgentClient[str]):
       system_prompt=SYSTEM_PROMPT,
       output_type=str,
       model_settings=self.model_settings,
+      capabilities=[Thinking(effort=False)],
     )
 
   def _parse_output(self, output: str) -> str:
     return output.strip()
 
   async def translate(self, message: str, source_language: str, target_language: str) -> str:
-    return await self._run(
-      TRANSLATION_PROMPT.format(
-        message=message,
-        source_language=source_language,
-        target_language=target_language,
-      )
+    prompt = TRANSLATION_PROMPT.format(
+      message=message,
+      source_language=source_language,
+      target_language=target_language,
     )
+
+    if self.uses_native_ollama:
+      output = await self._run_ollama(prompt, system_prompt=SYSTEM_PROMPT)
+      return self._parse_output(output)
+
+    return await self._run(prompt)

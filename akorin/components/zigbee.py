@@ -41,7 +41,7 @@ class ZigbeeComponent:
   def __init__(
     self,
     mqtt_service: MQTTService,
-    name_translator: Callable[[str], Awaitable[str]] | None = None,
+    name_translator: Callable[[str], Awaitable[str]],
   ) -> None:
     self.mqtt = mqtt_service
     self.client = mqtt_service.client
@@ -94,11 +94,8 @@ class ZigbeeComponent:
       logger.warning(f"Ignoring invalid Zigbee device list: {exception}")
 
   async def _translate_name(self, name: str) -> str:
-    if self.name_translator is None:
-      return name
-
     try:
-      translated_name = (await self.name_translator(name)).strip()
+      translated_name = await self.name_translator(name)
 
       return translated_name or name
     except Exception as exception:

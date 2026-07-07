@@ -19,7 +19,8 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic_ai import Agent
-from pydantic_ai import AgentModelSettings
+from pydantic_ai import ModelSettings
+from pydantic_ai.capabilities import Thinking
 
 from ...core.constants import Service
 from ..agent import AgentClient
@@ -48,21 +49,36 @@ class RouteDecision(BaseModel):
 
 
 class CommandAgent(AgentClient[RouteDecision]):
+  command_model_settings: ModelSettings
+
+  def _command_model_settings(self) -> ModelSettings:
+    return ModelSettings(
+      temperature=0,
+      max_tokens=0,
+      timeout=self.settings.llm_request_timeout,
+      seed=0,
+      thinking=False,
+    )
+
   def _create_agent(self) -> Any:
+    self.command_model_settings = self._command_model_settings()
+
     return Agent(
       model=self.model,
       system_prompt=SYSTEM_PROMPT,
       output_type=RouteDecision,
-      model_settings=self._build_router_model_settings(),
+      model_settings=self.command_model_settings,
+      capabilities=[Thinking(effort=False)],
     )
 
   async def classify(self, message: str) -> RouteDecision:
+    if self.uses_native_ollama:
+      return await self._run_ollama(
+        message,
+        system_prompt=SYSTEM_PROMPT,
+        model_settings=getattr(self, "command_model_settings", self._command_model_settings()),
+        output_type=RouteDecision,
+        response_format="json",
+      )
+
     return await self._run(message)
-
-  def _build_router_model_settings(self) -> AgentModelSettings:
-    model_settings: Any = self._build_model_settings(self.settings)
-    model_settings["temperature"] = 0
-    model_settings["seed"] = 0
-    model_settings["max_tokens"] = 80
-
-    return model_settings
