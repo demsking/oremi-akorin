@@ -25,7 +25,6 @@ Project repository: https://gitlab.com/demsking/oremi-akorin
 - weather forecasts, air quality, pollen, and alerts through the weather service;
 - radio and podcast discovery through Rediyo and Kansa;
 - Zigbee device control through MQTT and Zigbee2MQTT;
-- stable knowledge from Wikipedia and current information from DuckDuckGo;
 - native date/time, calculator, and unit-conversion tools.
 
 ## Deployment
@@ -291,13 +290,6 @@ disabled.
 - `OREMI_AKORIN_REQUEST_TIMEOUT`: Optional. Defaults to `30.0`. Global timeout
   in seconds for HTTP requests sent to external services.
 
-### Search Settings
-
-- `OREMI_AKORIN_SEARCH_ENABLED`: Optional. Defaults to `true`. Enables
-  DuckDuckGo search as a fallback for queries requiring current information.
-- `OREMI_AKORIN_SEARCH_TIMEOUT`: Optional. Defaults to `10.0`. Timeout in
-  seconds for search requests.
-
 ### MQTT Settings
 
 MQTT integration is optional. If `OREMI_AKORIN_MQTT_BROKER` is not configured,
@@ -378,17 +370,11 @@ English before processing.
 | ------------- | ----------------------------------------------- | ------------------------------------- |
 | `chat`        | General conversation                            | Configured Pydantic AI model          |
 | `tool`        | Live date/time, arithmetic, and unit conversion | Built in; invoked through Pydantic AI |
-| `wikipedia`   | Stable encyclopedic knowledge                   | Built in                              |
-| `search`      | Current facts and explicit web searches         | Built in when search is enabled       |
 | `isinmi`      | Scheduling and reminders                        | Requires `OREMI_AKORIN_ISINMI_URL`    |
 | `weather`     | Forecasts, air quality, pollen, and alerts      | Requires `OREMI_AKORIN_WEATHER_URL`   |
 | `rediyo`      | Radio                                           | Requires `OREMI_AKORIN_REDIYO_URL`    |
 | `kansa`       | Podcasts                                        | Requires `OREMI_AKORIN_KANSA_URL`     |
 | `zigbee`      | Smart-device control                            | Requires MQTT and Zigbee2MQTT         |
-
-Wikipedia results are synthesized into a short grounded answer. When no
-Wikipedia article matches, Akọrin falls back to DuckDuckGo if search is
-enabled.
 
 ### Native tools
 

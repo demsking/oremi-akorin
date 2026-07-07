@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -46,12 +47,27 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
     "switch on",
     "switch off",
     "light up",
+    "allume",
+    "allumer",
+    "eteins",
+    "eteinds",
+    "eteindre",
+    "eteint",
+    "eteignez",
     "dim",
     "brighten",
     "activate",
     "deactivate",
+    "active",
+    "activer",
+    "desactive",
+    "desactiver",
     "open",
     "close",
+    "ouvre",
+    "ouvrir",
+    "ferme",
+    "fermer",
     "lock",
     "unlock",
   )
@@ -69,6 +85,13 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
     "shutter",
     "switch",
     "thermostat",
+    "lumiere",
+    "lampe",
+    "interrupteur",
+    "volet",
+    "prise",
+    "porte",
+    "chauffage",
   }
 
   if match is None and (
@@ -102,20 +125,14 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
   ):
     match = RoutingMatch(Service.WEATHER, 0.95, "weather terminology")
 
-  if match is None and ("wikipedia" in words or words & {"encyclopedia", "encyclopedic"}):
-    match = RoutingMatch(Service.WIKIPEDIA, 0.97, "explicit encyclopedia request")
-
-  if match is None and _contains_any(
-    normalized,
-    ("search the web", "search online", "look up online", "latest news"),
-  ):
-    match = RoutingMatch(Service.SEARCH, 0.95, "explicit web search request")
-
   return match
 
 
 def _normalize(text: str) -> str:
-  return re.sub(r"[^a-z0-9]+", " ", text.casefold()).strip()
+  ascii_text = "".join(
+    character for character in unicodedata.normalize("NFKD", text.casefold()) if not unicodedata.combining(character)
+  )
+  return re.sub(r"[^a-z0-9]+", " ", ascii_text).strip()
 
 
 def _contains_any(text: str, phrases: tuple[str, ...]) -> bool:

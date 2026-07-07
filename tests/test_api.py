@@ -6,7 +6,6 @@ from pydantic import ValidationError
 
 from akorin.core.settings import Settings
 from akorin.core.app import create_app
-from akorin.core.app import log_startup_settings
 
 
 def isolated_settings(**overrides) -> Settings:
@@ -96,24 +95,6 @@ async def test_startup_and_shutdown_emit_operational_logs(caplog):
   with caplog.at_level(logging.INFO, logger="oremi-akorin"):
     async with app.router.lifespan_context(app):
       pass
-
-
-def test_startup_settings_do_not_log_credentials_or_url_queries(caplog):
-  settings = isolated_settings(
-    ollama_base_url="http://ollama-user:ollama-secret@ollama.test:11434/?token=secret-token",
-    mqtt_username="mqtt-user",
-    mqtt_password="mqtt-secret",
-  )
-
-  with caplog.at_level(logging.INFO, logger="oremi-akorin"):
-    log_startup_settings(settings)
-
-  output = "\n".join(record.getMessage() for record in caplog.records)
-  assert "ollama-secret" not in output
-  assert "secret-token" not in output
-  assert "mqtt-user" not in output
-  assert "mqtt-secret" not in output
-  assert "authentication_configured=True" in output
 
 
 @pytest.mark.asyncio

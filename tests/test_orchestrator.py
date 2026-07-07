@@ -7,7 +7,6 @@ from akorin.core.constants import Service
 from akorin.core.models import ProcessRequest
 from akorin.core.exceptions import ComponentUnavailable
 from akorin.core.exceptions import ComponentRequestError
-from akorin.core.exceptions import NoResultFound
 from akorin.llm.agent import ChatResult
 from akorin.services.orchestrator import Orchestrator
 from akorin.services.orchestrator import heuristic_route
@@ -25,7 +24,6 @@ class FakeOllama:
   async def translate(self, text, source_language, target_language):
     translations = {
       "Météo à Paris": "Weather in Paris",
-      "Wikipédia : quelle est la capitale de la Chine ?": "Wikipedia: what is the capital of China?",
       "quelle heure est il ?": "what time is it?",
       "I can't retrieve the weather right now. Please try again shortly.": (
         "Je ne peux pas obtenir la météo pour le moment. Veuillez réessayer bientôt."
@@ -41,12 +39,6 @@ class FakeOllama:
   async def chat_with_tools(self, text, language, context, tools):
     message = "discussion de secours" if language == "fr" else "fallback chat"
     return ChatResult(message=message, tools=self.tools)
-
-  async def answer_from_source(self, question, source, language):
-    if language == "fr":
-      return "La capitale de la Chine est Pékin."
-    return "The capital of China is Beijing."
-
 
 class FakeComponent:
   def __init__(self, unavailable=False):
@@ -77,27 +69,11 @@ class FakeIncompleteRequestComponent:
     )
 
 
-class FakeWikipediaWithoutResult:
-  async def process(self, text, language, context, tags):
-    raise NoResultFound("wikipedia")
-
-
-class FakeWikipediaResult:
-  async def process(self, text, language, context, tags):
-    source = "Les capitales historiques incluent Pékin. Pékin est l'actuelle capitale de la Chine."
-    return source, {"source": "Wikipedia", "url": "https://fr.wikipedia.org/wiki/Chine"}
-
-
-class FakeSearch:
-  async def process(self, text, language, context, tags):
-    return "Web result", {"source": "search"}
-
-
 def test_heuristic_routes_bilingual_intents():
   assert heuristic_route("Météo à Paris")[0] == Service.WEATHER
   assert heuristic_route("Play a podcast")[0] == Service.KANSA
   assert heuristic_route("Hello there")[0] == Service.CHAT
-  assert heuristic_route("Recherche Wikipédia sur le Cameroun")[0] == Service.WIKIPEDIA
+  assert heuristic_route("Recherche Wikipédia sur le Cameroun")[0] == Service.CHAT
 
 
 @pytest.mark.parametrize(
@@ -106,6 +82,8 @@ def test_heuristic_routes_bilingual_intents():
     "light up the bedroom light",
     "turn on the light in the room",
     "switch on the bedroom lamp",
+    "éteins la lumière de la chambre",
+    "eteinds la lumière de la chambre",
   ],
 )
 def test_rule_router_stably_routes_device_command_variants(text):
@@ -125,10 +103,10 @@ def test_rule_router_distinguishes_light_names_and_weather_stations_from_radio()
 
 
 def test_rule_router_accepts_explicit_service_context():
-  match = rule_route("tell me about Lagos", {"route_to": "wikipedia"})
+  match = rule_route("tell me about Lagos", {"route_to": "weather"})
 
   assert match is not None
-  assert match.service == Service.WIKIPEDIA
+  assert match.service == Service.WEATHER
   assert match.reason == "explicit service context"
 
 
@@ -225,7 +203,7 @@ async def test_incomplete_media_result_falls_back_to_automatic_message_speech():
 async def test_direct_device_controls_bypass_conversational_processing(text, language, command):
   orchestrator = Orchestrator(FakeOllama(), {})
 
-  result = await orchestrator.process(ProcessRequest(message=message, language=language))
+  result = await orchestrator.process(ProcessRequest(message=text, language=language))
 
   assert result.service == Service.DEVICE
   assert result.commands[0].model_dump(mode="json", exclude_none=True) == command
@@ -340,34 +318,6 @@ async def test_missing_component_input_returns_help_without_internal_details():
   assert result.message == "Please share a location so I can check alerts for that area."
   assert result.data == {"error": {"type": "more_information_required"}}
   assert "context.lat" not in result.model_dump_json()
-
-
-@pytest.mark.asyncio
-async def test_wikipedia_without_results_falls_back_to_web_search():
-  orchestrator = Orchestrator(
-    FakeOllama(),
-    {
-      Service.WIKIPEDIA: FakeWikipediaWithoutResult(),
-      Service.SEARCH: FakeSearch(),
-    },
-  )
-  result = await orchestrator.process(ProcessRequest(text="Wikipedia unknown subject", language="en"))
-
-  assert result.ok is True
-  assert result.service == Service.SEARCH
-  assert result.message == "Web result"
-  assert result.data == {"source": "search"}
-
-
-@pytest.mark.asyncio
-async def test_wikipedia_result_is_synthesized_into_a_short_grounded_answer():
-  orchestrator = Orchestrator(FakeOllama(), {Service.WIKIPEDIA: FakeWikipediaResult()})
-
-  result = await orchestrator.process(ProcessRequest(text="Wikipédia : quelle est la capitale de la Chine ?", language="fr"))
-
-  assert result.service == Service.WIKIPEDIA
-  assert result.message == "La capitale de la Chine est Pékin."
-  assert result.data["source"] == "Wikipedia"
 
 
 @pytest.mark.asyncio

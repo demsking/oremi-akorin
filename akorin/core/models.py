@@ -42,8 +42,8 @@ class ProcessRequest(BaseModel):
       "Quel temps fait-il à Paris ?",
       "Play me some Afrobeat music",
       "Joue-moi de l'Afrobeat",
-      "Who is the president of Nigeria?",
-      "Qui est le président du Nigeria ?",
+      "What time is it in Lagos?",
+      "Quelle heure est-il à Paris ?",
       "Set a reminder for tomorrow at 9 AM",
       "Rappelle-moi demain à 9 h d'appeler maman",
       "Hello, how are you?",
@@ -200,7 +200,7 @@ class ProcessResponse(BaseModel):
   ok: bool = Field(default=True, description="Indicates whether the processing was successful.")  # pylint: disable=invalid-name
   input: str = Field(description="Original input text that was processed.")
   language: Language = Field(description="Detected or specified language of the input text.")
-  service: Service = Field(description="Service that handled the request (e.g., 'ollama', 'search', or external service).")
+  service: Service = Field(description="Service that handled the request (e.g., 'chat', 'tool', or external service).")
   message: str = Field(description="Human-readable response message containing the processing result or error details.")
   data: Any = Field(
     default_factory=dict,

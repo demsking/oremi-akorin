@@ -36,8 +36,6 @@ SYSTEM_PROMPT = (
   "- rediyo: radio stations.\n"
   "- kansa: podcasts.\n"
   "- zigbee: smart home and Zigbee devices.\n"
-  "- wikipedia: history, biographies, places, science, definitions, encyclopedic knowledge.\n"
-  "- search: recent news, current events, live information, or explicit web searches.\n"
   "- chat: everything else, including current time, current date, or current day.\n\n"
   "Return nothing except the JSON object."
 )

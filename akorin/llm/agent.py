@@ -99,7 +99,7 @@ class AgentClient(Generic[OutputModel], ABC):
     system_prompt: str | None,
     model_settings: ModelSettings | None = None,
     output_type: type[Any] = str,
-    response_format: str | None = None,
+    response_format: Any = None,
   ) -> Any:
     if self.ollama_client is None:
       raise RuntimeError("Native Ollama client is not configured")

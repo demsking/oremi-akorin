@@ -12,12 +12,12 @@ from pydantic_ai.models.test import TestModel
 from akorin.core.constants import Service
 from akorin.core.settings import Settings
 from akorin.llm.agent import AgentClient
-from akorin.llm.agents.answer import AnswerAgent
 from akorin.llm.agents.chat import ChatAgent
 from akorin.llm.agents.chat_tools import ChatToolsAgent
 from akorin.llm.agents.command import CommandAgent
 from akorin.llm.agents.spellcheck import SpellCheckAgent
 from akorin.llm.agents.translator import TranslatorAgent
+from akorin.llm.agents.zigbee_command import ZigbeeCommandAgent
 from akorin.services.tools import DateTimeTool
 from akorin.services.tools import ToolRegistry
 
@@ -106,39 +106,9 @@ async def test_pydantic_ai_tool_call_records_tool_result(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_grounded_answer_is_constrained_and_deterministic(monkeypatch):
-  captured = ""
-  captured_settings = None
-
-  def handler(messages, info: AgentInfo) -> ModelResponse:
-    nonlocal captured, captured_settings
-    captured = str(messages)
-    captured_settings = info.model_settings
-    return ModelResponse(parts=[TextPart("La capitale de la Chine est Pékin.")])
-
-  use_model(monkeypatch, FunctionModel(handler))
-
-  async with httpx.AsyncClient() as client:
-    agent = AnswerAgent(isolated_settings(), client)
-    result = await agent.answer(
-      "Quelle est la capitale de la Chine ?",
-      "Pékin est l'actuelle capitale de la république populaire de Chine.",
-      "fr",
-    )
-
-  assert result == "La capitale de la Chine est Pékin."
-  assert captured_settings["temperature"] == 0
-  assert captured_settings["max_tokens"] == 100
-  assert "using only the supplied source" in captured
-  assert "at most two short sentences" in captured
-
-
-@pytest.mark.asyncio
-async def test_native_ollama_chat_disables_thinking():
-  requests = []
-
+async def test_native_ollama_zigbee_command_handles_non_json_response():
   class FakeMessage:
-    content = "Bedroom thermometer"
+    content = "I am ready. I have analyzed your device list and can now assist you."
     tool_calls = None
 
   class FakeResponse:
@@ -146,16 +116,23 @@ async def test_native_ollama_chat_disables_thinking():
 
   class FakeOllamaClient:
     async def chat(self, **kwargs):
-      requests.append(kwargs)
       return FakeResponse()
 
   async with httpx.AsyncClient() as client:
-    agent = TranslatorAgent(ollama_settings(), client)
+    agent = ZigbeeCommandAgent(ollama_settings(), client)
     agent.ollama_client = FakeOllamaClient()
-    result = await agent.translate("Thermomètre de la chambre", "auto-detected language", "en")
+    decision = await agent.select(
+      ["allume la lumière de la chambre"],
+      [
+        {
+          "name": "Lumière de la chambre",
+          "mqtt_topic": "Lumière de la chambre",
+          "operations": [{"property": "state", "type": "binary", "value_on": "ON", "value_off": "OFF"}],
+        }
+      ],
+    )
 
-  assert result == "Bedroom thermometer"
-  assert requests[0]["model"] == "qwen3.5:2b"
-  assert requests[0]["think"] is False
-  assert requests[0]["messages"][0]["role"] == "system"
-  assert requests[0]["messages"][1]["content"].endswith("Thermomètre de la chambre")
+  assert decision.device is None
+  assert decision.payload == {}
+  assert decision.state_properties == []
+  assert decision.confidence == 0

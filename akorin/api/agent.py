@@ -517,7 +517,6 @@ async def process_user_input(
   omitted, and routes the request to the best available capability:
 
   - conversational answers and native date/time, calculator, or conversion tools;
-  - Wikipedia for stable knowledge and DuckDuckGo for current information;
   - configured scheduling, weather, radio, podcast, or Zigbee services.
   """
   context: AppContext = request.app.state.context

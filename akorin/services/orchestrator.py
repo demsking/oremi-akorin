@@ -25,11 +25,9 @@ from ..core.constants import Language
 from ..core.constants import Service
 from ..core.exceptions import ComponentRequestError
 from ..core.exceptions import ComponentUnavailable
-from ..core.exceptions import NoResultFound
 from ..core.models import ProcessRequest
 from ..core.models import ProcessResponse
 from ..core.settings import Settings
-from ..llm.agents.answer import AnswerAgent
 from ..llm.agents.chat import ChatAgent
 from ..llm.agents.chat_tools import ChatToolsAgent
 from ..llm.agents.command import CommandAgent
@@ -49,8 +47,6 @@ KEYWORDS: dict[Service, tuple[str, ...]] = {
   Service.REDIYO: ("radio", "station", "rediyo"),
   Service.KANSA: ("kansa", "podcast", "episode", "épisode"),
   Service.ZIGBEE: ("zigbee", "light", "lamp", "lampe", "switch", "thermostat", "turn on", "turn off", "allume", "éteins"),
-  Service.WIKIPEDIA: ("wikipedia", "wikipédia", "encyclopedia", "encyclopédie"),
-  Service.SEARCH: ("search", "look up", "recherche", "cherche sur le web", "latest", "current", "actuel"),
 }
 
 
@@ -81,7 +77,6 @@ class Orchestrator:
     self.tools = tools or ToolRegistry()
     self.chat_agent = ChatAgent(settings, client)
     self.chat_tools_agent = ChatToolsAgent(settings, client)
-    self.answer_agent = AnswerAgent(settings, client)
     self.command_agent = CommandAgent(settings, client)
     self.spellcheck_agent = SpellCheckAgent(settings, client)
 
@@ -208,46 +203,8 @@ class Orchestrator:
           f"data_keys={sorted(data) if isinstance(data, dict) else []}"
         )
 
-        if service == Service.WIKIPEDIA:
-          synthesis_started = perf_counter()
-
-          try:
-            message = await self.answer_agent.answer(processing_message, message, processing_language.value)
-          except httpx.HTTPError as exception:
-            raise ComponentUnavailable(Service.WIKIPEDIA, str(exception)) from exception
-
-          logger.debug(
-            f"[{request_id}] Wikipedia answer synthesis completed: "
-            f"duration_ms={(perf_counter() - synthesis_started) * 1000:.1f}"
-          )
-
         if isinstance(data, dict) and data.get("ok") is False:
           ok = False
-    except NoResultFound as exception:
-      logger.info(f"[{request_id}] {exception.service} returned no result; falling back to web search")
-      search = self.handlers.get(Service.SEARCH)
-
-      if search is None:
-        ok = False
-        message = self._component_failure_message(Service.SEARCH, processing_language)
-        data = {"error": {"type": "service_temporarily_unavailable"}}
-      else:
-        try:
-          fallback_started = perf_counter()
-          message, data = await search.process(processing_message, processing_language.value, request.context, request.tags)
-          service = Service.SEARCH
-          confidence = min(confidence, 0.7)
-
-          logger.debug(
-            f"[{request_id}] Web search fallback completed: duration_ms={(perf_counter() - fallback_started) * 1000:.1f}"
-          )
-        except ComponentUnavailable as search_error:
-          logger.warning(f"[{request_id}] Web search fallback failed: {search_error.reason}")
-
-          ok = False
-          service = Service.SEARCH
-          message = self._component_failure_message(Service.SEARCH, processing_language)
-          data = {"error": {"type": "service_temporarily_unavailable"}}
     except ComponentRequestError as exception:
       logger.info(f"[{request_id}] {service} needs more information: {exception.reason}")
 
@@ -332,14 +289,6 @@ FAILURE_MESSAGES: dict[Service, dict[Language, str]] = {
   Service.ZIGBEE: {
     Language.EN: "I can't control your connected device right now. Please try again shortly.",
     Language.FR: "Je ne peux pas commander votre appareil connecté pour l'instant. Réessayez un peu plus tard.",
-  },
-  Service.SEARCH: {
-    Language.EN: "I can't search online right now. Please try again shortly.",
-    Language.FR: "La recherche en ligne est temporairement inaccessible. Merci de réessayer bientôt.",
-  },
-  Service.WIKIPEDIA: {
-    Language.EN: "I can't access Wikipedia right now. Please try again shortly.",
-    Language.FR: "Wikipédia est indisponible pour le moment. Veuillez tenter à nouveau dans un instant.",
   },
 }
 

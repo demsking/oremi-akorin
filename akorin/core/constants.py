@@ -29,5 +29,3 @@ class Service(StrEnum):
   ZIGBEE = "zigbee"
   TOOL = "tool"
   CHAT = "chat"
-  WIKIPEDIA = "wikipedia"
-  SEARCH = "search"

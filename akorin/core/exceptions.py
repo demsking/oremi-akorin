@@ -33,9 +33,3 @@ class ComponentRequestError(OremiError):
     self.reason = reason
     self.message_en = message_en
     self.message_fr = message_fr
-
-
-class NoResultFound(OremiError):
-  def __init__(self, service: str):
-    super().__init__(f"{service} returned no result")
-    self.service = service

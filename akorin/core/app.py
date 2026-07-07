@@ -34,13 +34,10 @@ from ..components.kansa import KansaClient
 from ..components.rediyo import RediyoClient
 from ..components.weather import WeatherClient
 from ..components.zigbee import ZigbeeComponent
-from ..llm.agents.translator import TranslatorAgent
+from ..llm.agents.zigbee_command import ZigbeeCommandAgent
 from ..services.orchestrator import Orchestrator
-from ..services.search import SearchService
-from ..services.wikipedia import WikipediaService
 from ..utils.logger import configure_logging
 from ..utils.url import safe_url
-from .constants import Language
 from .constants import Service
 from .context import AppContext
 from .mqtt import MQTTService
@@ -116,7 +113,6 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       settings.oremi_device_mqtt_topic,
       settings.mqtt_transcription_topic,
     )
-    logger.info("App settings [search]: enabled=%s timeout=%ss", settings.search_enabled, settings.search_timeout)
     logger.info("App settings [logging]: level=%s destination=%s", settings.log_level, settings.log_file or "stderr")
 
     client = http_client or httpx.AsyncClient(timeout=settings.request_timeout)
@@ -127,7 +123,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
 
       await _pull_ollama_model(settings)
 
-    translator_agent = TranslatorAgent(settings, client)
+    zigbee_command_agent = ZigbeeCommandAgent(settings, client)
 
     configured_components = (
       (Service.ISINMI, settings.isinmi_url, IsinmiClient),
@@ -145,7 +141,6 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     component_names = [service.value for service in components]
     logger.info(
       f"Services configured: external={component_names or ['none']} "
-      f"wikipedia=enabled search={'enabled' if settings.search_enabled else 'disabled'} "
       f"zigbee={'enabled' if settings.is_mqtt_enabled else 'disabled'}"
     )
 
@@ -153,19 +148,12 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       raise RuntimeError("MQTT processor is not initialized")
 
     mqtt = MQTTService(settings, _uninitialized_processor)
-    zigbee = ZigbeeComponent(
-      mqtt,
-      name_translator=lambda name: translator_agent.translate(name, "auto-detected language", Language.EN.value),
-    )
+    zigbee = ZigbeeComponent(mqtt, command_selector=zigbee_command_agent.select)
 
     handlers = {
       **components,
-      Service.WIKIPEDIA: WikipediaService(client),
       Service.ZIGBEE: zigbee,
     }
-
-    if settings.search_enabled:
-      handlers[Service.SEARCH] = SearchService(client, timeout=settings.search_timeout)
 
     orchestrator = Orchestrator(settings, client, handlers)
     mqtt.processor = orchestrator.process

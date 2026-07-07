@@ -172,17 +172,6 @@ class Settings(BaseSettings):
     description="Maximum number of tokens to generate in LLM responses. Default: 500.",
   )
 
-  search_enabled: bool = Field(
-    default=True,
-    description="Enable DuckDuckGo search fallback for unknown queries. Default: true.",
-  )
-
-  search_timeout: float = Field(
-    default=10.0,
-    gt=1.0,
-    description="Timeout in seconds for search requests. Default: 10.0.",
-  )
-
   log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO", description="Logging level.")
   log_file: str = Field(default="oremi_akorin.log", description="Path to rotating log file.")
 
