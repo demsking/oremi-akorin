@@ -168,7 +168,7 @@ class Settings(BaseSettings):
   )
 
   log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO", description="Logging level.")
-  log_file: str = Field(default="oremi_akorin.log", description="Path to rotating log file.")
+  log_file: str | None = Field(default=None, description="Path to rotating log file.")
 
   @field_validator("api_prefix")
   @classmethod

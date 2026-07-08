@@ -308,6 +308,7 @@ MQTT support is disabled.
   for the MQTT connection.
 - `OREMI_AKORIN_MQTT_TLS_CA_CERT`: Optional. Path to the CA certificate used to
   verify the MQTT broker when TLS is enabled.
+
 ### Logging Settings
 
 - `OREMI_AKORIN_LOG_LEVEL`: Optional. Defaults to `INFO`. Logging level:

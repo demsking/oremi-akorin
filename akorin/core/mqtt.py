@@ -35,7 +35,7 @@ class MQTTService:
     self._connection_event = asyncio.Event()
     self._connection_error: str | None = None
     self.message_handlers: dict[str, Callable[[bytes], Awaitable[None] | None]] = {}
-    self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=settings.mqtt_client_id)
+    self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=settings.mqtt_client_id)  # pyright: ignore
     self.client.on_connect = self._on_connect
     self.client.on_connect_fail = self._on_connect_fail
     self.client.on_message = self._on_message
@@ -125,8 +125,8 @@ class MQTTService:
     client: mqtt.Client,
     userdata: object,
     flags: mqtt.ConnectFlags,
-    reason_code: mqtt.ReasonCode,
-    properties: mqtt.Properties | None,
+    reason_code: mqtt.ReasonCode,  # pyright: ignore
+    properties: mqtt.Properties | None,  # pyright: ignore
   ) -> None:
     if reason_code == 0:
       for topic in self.message_handlers:

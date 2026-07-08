@@ -107,7 +107,7 @@ image-test:
 	  --tag $(IMAGE_NAME):test
 
 live: image-test
-	docker run -it --rm --env-file .env.example -v ./data:/oremi/data -p 5020:5020 $(IMAGE_NAME):test
+	docker run -it --rm --env-file .env.example -v ./data:/oremi/data --network host -p 5020:5020 $(IMAGE_NAME):test
 
 publish: image-test
 	git tag v$(APP_VERSION)
