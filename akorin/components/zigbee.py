@@ -35,6 +35,7 @@ DEVICES_TOPIC = "zigbee2mqtt/bridge/devices"
 DEVICE_TOPIC_PREFIX = "zigbee2mqtt/"
 ORIGINAL_TEXT_CONTEXT_KEY = "_oremi_original_text"
 DEVICE_MATCH_THRESHOLD = 0.72
+DEVICE_SUGGESTION_THRESHOLD = 0.5
 DEVICE_MATCH_MARGIN = 0.1
 ZIGBEE_GET_ACCESS = 1
 ZIGBEE_SET_ACCESS = 2
@@ -115,10 +116,12 @@ class ZigbeeComponent:
     self,
     mqtt_service: MQTTService,
     command_selector: Callable[[list[str], list[dict[str, Any]]], Awaitable[Any]] | None = None,
+    response_generator: Callable[[str, str, dict[str, Any]], Awaitable[str]] | None = None,
   ) -> None:
     self.mqtt = mqtt_service
     self.client = mqtt_service.client
     self.command_selector = command_selector
+    self.response_generator = response_generator
     self.devices: dict[str, dict[str, Any]] = {}
     self.operations: dict[str, dict[str, ZigbeeOperation]] = {}
     self.states: dict[str, dict[str, ZigbeeState]] = {}
@@ -418,18 +421,7 @@ class ZigbeeComponent:
       _, bridge_name, device_name, reason, score = max(exact_matches)
       return bridge_name, device_name, reason, score
 
-    fuzzy_matches = []
-
-    for device_name, device in self.devices.items():
-      friendly_name = str(device.get("friendly_name", ""))
-      aliases = {self._normalize(device_name), self._normalize(friendly_name)}
-      score = max(
-        (self._device_similarity(text, alias) for text in normalized_texts for alias in aliases if alias),
-        default=0.0,
-      )
-      fuzzy_matches.append((score, friendly_name, device_name))
-
-    fuzzy_matches.sort(reverse=True)
+    fuzzy_matches = self._device_candidates(normalized_texts)
 
     if not fuzzy_matches or fuzzy_matches[0][0] < DEVICE_MATCH_THRESHOLD:
       return None
@@ -446,6 +438,34 @@ class ZigbeeComponent:
       return None
 
     return bridge_name, device_name, "fuzzy", best_score
+
+  def _suggest_devices(self, texts: list[str]) -> list[str]:
+    candidates = self._device_candidates([self._normalize(text) for text in texts if text])
+
+    if not candidates or candidates[0][0] < DEVICE_SUGGESTION_THRESHOLD:
+      return []
+
+    best_score = candidates[0][0]
+
+    return [
+      device_name
+      for score, _, device_name in candidates[:3]
+      if score >= DEVICE_SUGGESTION_THRESHOLD and best_score - score <= DEVICE_MATCH_MARGIN
+    ]
+
+  def _device_candidates(self, normalized_texts: list[str]) -> list[tuple[float, str, str]]:
+    candidates = []
+
+    for device_name, device in self.devices.items():
+      friendly_name = str(device.get("friendly_name", ""))
+      aliases = {self._normalize(device_name), self._normalize(friendly_name)}
+      score = max(
+        (self._device_similarity(text, alias) for text in normalized_texts for alias in aliases if alias),
+        default=0.0,
+      )
+      candidates.append((score, friendly_name, device_name))
+
+    return sorted(candidates, reverse=True)
 
   def _device_similarity(self, text: str, alias: str) -> float:
     ignored_words = {
@@ -472,6 +492,44 @@ class ZigbeeComponent:
     token_score = len(text_tokens & alias_tokens) / len(alias_tokens) if alias_tokens else 0.0
     sequence_score = SequenceMatcher(None, text, alias).ratio()
     return max(token_score, sequence_score)
+
+  def _device_exists(self, device_name: str) -> bool:
+    normalized = self._normalize(device_name)
+
+    return any(
+      self._normalize(name) == normalized or self._normalize(str(device.get("friendly_name") or "")) == normalized
+      for name, device in self.devices.items()
+    )
+
+  def _available_device_names(self) -> list[str]:
+    return sorted(self.devices)
+
+  def _has_device_reference(self, texts: list[str]) -> bool:
+    device_words = {
+      "device",
+      "heater",
+      "interrupteur",
+      "lamp",
+      "lampe",
+      "light",
+      "lights",
+      "lumiere",
+      "lumieres",
+      "plug",
+      "prise",
+      "radiateur",
+      "switch",
+      "thermostat",
+    }
+
+    return any(set(self._normalize(text).split()) & device_words for text in texts if text)
+
+  def _requested_device_hint(self, texts: list[str]) -> str | None:
+    for text in texts:
+      if self._normalize(text):
+        return text
+
+    return None
 
   @staticmethod
   def _normalize(value: str) -> str:
@@ -553,7 +611,12 @@ class ZigbeeComponent:
     match_score = 1.0
 
     if self.command_selector is None:
-      return self._missing_command_response(language, device_missing=not explicit_device, payload_missing=True)
+      return await self._missing_command_response(
+        language,
+        device_missing=not explicit_device,
+        payload_missing=True,
+        reason="command_selector_unavailable",
+      )
 
     if explicit_device:
       bridge_device, display_name = self._resolve_device(explicit_device)
@@ -569,7 +632,15 @@ class ZigbeeComponent:
     catalog = self._device_catalog_for(display_name) if display_name else self._device_catalog()
 
     if not catalog:
-      return self._missing_command_response(language, device_missing=True, payload_missing=True)
+      reason = "requested_device_not_found" if display_name or explicit_device else "no_devices_available"
+      return await self._missing_command_response(
+        language,
+        device_missing=True,
+        payload_missing=not display_name,
+        reason=reason,
+        requested_device=display_name or explicit_device or None,
+        suggested_devices=self._suggest_devices([display_name, explicit_device, *command_texts]),
+      )
 
     try:
       decision = await self.command_selector([text for text in command_texts if text], catalog)
@@ -585,9 +656,20 @@ class ZigbeeComponent:
     if isinstance(decision, dict) and isinstance(decision.get("device"), str):
       bridge_device, display_name = self._resolve_device(decision["device"])
 
+      if not self._device_exists(display_name):
+        suggested_devices = self._suggest_devices([decision["device"], *command_texts])
+        return await self._missing_command_response(
+          language,
+          device_missing=True,
+          payload_missing=False,
+          reason="device_confirmation_required" if suggested_devices else "requested_device_not_found",
+          requested_device=decision["device"],
+          suggested_devices=suggested_devices,
+        )
+
     if self._is_read_decision(decision):
       state_properties = decision.get("state_properties") if isinstance(decision, dict) else None
-      return self._read_device_state(display_name, state_properties, language)
+      return await self._read_device_state(display_name, state_properties, language)
 
     payload = decision.get("payload") if isinstance(decision, dict) else None
     validated_payload = self._validate_payload(display_name, payload)
@@ -598,7 +680,30 @@ class ZigbeeComponent:
     )
 
     if not display_name or not validated_payload:
-      return self._missing_command_response(language, device_missing=not display_name, payload_missing=not validated_payload)
+      device_missing = not display_name
+      reason = "missing_operation"
+
+      suggested_devices = self._suggest_devices(command_texts) if device_missing else []
+
+      if suggested_devices:
+        reason = "device_confirmation_required"
+      elif device_missing and self._has_device_reference(command_texts):
+        reason = "requested_device_not_found"
+      elif device_missing:
+        reason = "missing_device"
+
+      return await self._missing_command_response(
+        language,
+        device_missing=device_missing,
+        payload_missing=not validated_payload and not suggested_devices,
+        reason=reason,
+        requested_device=(
+          self._requested_device_hint(command_texts)
+          if reason in {"device_confirmation_required", "requested_device_not_found"}
+          else None
+        ),
+        suggested_devices=suggested_devices,
+      )
 
     info = await asyncio.to_thread(self.client.publish, f"zigbee2mqtt/{bridge_device}/set", json.dumps(validated_payload))
 
@@ -607,7 +712,11 @@ class ZigbeeComponent:
 
     self._merge_device_state(display_name, validated_payload)
 
-    message = f"Command sent to {display_name}." if language == "en" else f"Commande envoyée à {display_name}."
+    message = await self._generate_response(
+      "zigbee_command_sent",
+      language,
+      {"device": display_name, "command": validated_payload},
+    )
 
     return message, {"device": display_name, "command": validated_payload}
 
@@ -621,9 +730,14 @@ class ZigbeeComponent:
 
     return intent == "read" or (isinstance(state_properties, list) and bool(state_properties) and not decision.get("payload"))
 
-  def _read_device_state(self, display_name: str, state_properties: Any, language: str) -> tuple[str, dict[str, Any]]:
+  async def _read_device_state(self, display_name: str, state_properties: Any, language: str) -> tuple[str, dict[str, Any]]:
     if not display_name:
-      return self._missing_command_response(language, device_missing=True, payload_missing=False)
+      return await self._missing_command_response(
+        language,
+        device_missing=True,
+        payload_missing=False,
+        reason="missing_device",
+      )
 
     readable_states = self.states.get(display_name, {})
     cached_state = self.device_states.get(display_name, {})
@@ -635,14 +749,22 @@ class ZigbeeComponent:
     values = {property_name: cached_state[property_name] for property_name in requested if property_name in cached_state}
 
     if not values:
-      message = (
-        f"No cached state is available for {display_name}."
-        if language == "en"
-        else f"Aucun état en cache n'est disponible pour {display_name}."
+      message = await self._generate_response(
+        "zigbee_state_unavailable",
+        language,
+        {"device": display_name, "requested_state": requested},
       )
       return message, {"device": display_name, "required": ["state"]}
 
-    message = self._format_state_response(display_name, readable_states, values, language)
+    message = await self._generate_response(
+      "zigbee_state",
+      language,
+      {
+        "device": display_name,
+        "state": values,
+        "state_catalog": {property_name: readable_states[property_name].as_catalog() for property_name in values},
+      },
+    )
 
     return message, {"device": display_name, "state": values}
 
@@ -662,110 +784,6 @@ class ZigbeeComponent:
         logger.warning(f"Ignoring unsupported Zigbee state for {display_name}: {property_name}")
 
     return requested
-
-  def _format_state_response(
-    self,
-    display_name: str,
-    readable_states: dict[str, ZigbeeState],
-    values: dict[str, Any],
-    language: str,
-  ) -> str:
-    if len(values) == 1:
-      property_name, value = next(iter(values.items()))
-      state = readable_states[property_name]
-      binary_sentence = self._format_binary_state_sentence(display_name, state, value, language)
-
-      if binary_sentence:
-        return binary_sentence
-
-    rendered_values = [
-      self._format_state_value(readable_states[property_name], values[property_name], language) for property_name in values
-    ]
-
-    return (
-      f"{display_name}: {', '.join(rendered_values)}."
-      if language == "en"
-      else f"{display_name} : {', '.join(rendered_values)}."
-    )
-
-  def _format_binary_state_sentence(
-    self,
-    display_name: str,
-    state: ZigbeeState,
-    value: Any,
-    language: str,
-  ) -> str | None:
-    operation = self.operations.get(display_name, {}).get(state.property)
-
-    if state.property != "state" or operation is None:
-      return None
-
-    if self._same_value(value, operation.value_on):
-      if language == "en":
-        return f"{display_name} is on."
-
-      return f"{display_name} est {self._french_power_adjective(display_name, enabled=True)}."
-
-    if self._same_value(value, operation.value_off):
-      if language == "en":
-        return f"{display_name} is off."
-
-      return f"{display_name} est {self._french_power_adjective(display_name, enabled=False)}."
-
-    return None
-
-  @staticmethod
-  def _same_value(left: Any, right: Any) -> bool:
-    if isinstance(left, str) and isinstance(right, str):
-      return left.casefold() == right.casefold()
-
-    return left == right
-
-  def _format_state_value(self, state: ZigbeeState, value: Any, language: str) -> str:
-    label = self._state_label(state.property, language)
-    suffix = f" {state.unit}" if state.unit else ""
-    return f"{label} {value}{suffix}"
-
-  def _state_label(self, property_name: str, language: str) -> str:
-    labels = {
-      "fr": {
-        "battery": "batterie",
-        "brightness": "luminosité",
-        "current_heating_setpoint": "température cible",
-        "humidity": "humidité",
-        "local_temperature": "température",
-        "occupancy": "présence",
-        "power": "puissance",
-        "smoke": "fumée",
-        "state": "état",
-        "temperature": "température",
-      },
-      "en": {
-        "battery": "battery",
-        "brightness": "brightness",
-        "current_heating_setpoint": "target temperature",
-        "humidity": "humidity",
-        "local_temperature": "temperature",
-        "occupancy": "occupancy",
-        "power": "power",
-        "smoke": "smoke",
-        "state": "state",
-        "temperature": "temperature",
-      },
-    }
-
-    localized = labels.get(language, labels["en"])
-    return localized.get(property_name, property_name.replace("_", " "))
-
-  def _french_power_adjective(self, display_name: str, *, enabled: bool) -> str:
-    feminine_names = {"lampe", "lumiere", "lumière", "prise", "alarme"}
-    first_word = self._normalize(display_name).split(maxsplit=1)[0] if display_name else ""
-    feminine = first_word in {self._normalize(name) for name in feminine_names}
-
-    if enabled:
-      return "allumée" if feminine else "allumé"
-
-    return "éteinte" if feminine else "éteint"
 
   def _merge_device_state(self, display_name: str, values: dict[str, Any]) -> None:
     known_states = self.states.get(display_name, {})
@@ -809,7 +827,7 @@ class ZigbeeComponent:
 
   def _validate_value(self, operation: ZigbeeOperation, value: Any) -> Any:
     if operation.type == "binary":
-      if value == operation.value_on or value == operation.value_off:
+      if value in (operation.value_on, operation.value_off):
         return value
 
       if isinstance(value, bool):
@@ -860,9 +878,16 @@ class ZigbeeComponent:
 
     return None
 
-  @staticmethod
-  def _missing_command_response(language: str, *, device_missing: bool, payload_missing: bool) -> tuple[str, dict[str, Any]]:
-    message = "Specify a device and operation." if language == "en" else "Précisez un appareil et l'opération à appliquer."
+  async def _missing_command_response(
+    self,
+    language: str,
+    *,
+    device_missing: bool,
+    payload_missing: bool,
+    reason: str,
+    requested_device: str | None = None,
+    suggested_devices: list[str] | None = None,
+  ) -> tuple[str, dict[str, Any]]:
     required = []
 
     if device_missing:
@@ -871,4 +896,32 @@ class ZigbeeComponent:
     if payload_missing:
       required.append("operation")
 
-    return message, {"required": required}
+    data: dict[str, Any] = {"required": required, "reason": reason}
+
+    if requested_device:
+      data["requested_device"] = requested_device
+
+    if suggested_devices:
+      data["suggested_devices"] = suggested_devices
+      if len(suggested_devices) == 1:
+        data["suggested_device"] = suggested_devices[0]
+
+    available_devices = self._available_device_names()
+
+    if available_devices:
+      data["available_devices"] = available_devices
+
+    message = await self._generate_response("zigbee_missing_command", language, data)
+
+    return message, data
+
+  async def _generate_response(self, event: str, language: str, details: dict[str, Any]) -> str:
+    if self.response_generator is None:
+      raise ComponentUnavailable(Service.ZIGBEE, "response generator is not configured")
+
+    message = (await self.response_generator(event, language, details)).strip()
+
+    if not message:
+      raise ComponentUnavailable(Service.ZIGBEE, "response generator returned an empty message")
+
+    return message

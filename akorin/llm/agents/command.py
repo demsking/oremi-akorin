@@ -23,6 +23,7 @@ from pydantic_ai import ModelSettings
 from pydantic_ai.capabilities import Thinking
 
 from ...core.constants import Service
+from ...services.router import rule_route
 from ..agent import AgentClient
 
 
@@ -32,11 +33,35 @@ SYSTEM_PROMPT = (
   '{"service":"<service>","confidence":<0-1>}\n\n'
   "Valid services:\n"
   "- isinmi: reminders, alarms, timers, calendar, scheduling.\n"
-  "- weather: weather, forecast, temperature, air quality, pollen, alerts.\n"
+  "- weather: current or future weather, forecast, temperature, air quality, pollen, alerts, or warnings for a place.\n"
   "- rediyo: radio stations.\n"
   "- kansa: podcasts.\n"
-  "- zigbee: smart home and Zigbee devices.\n"
+  "- zigbee: smart home and Zigbee devices, including lights, lamps, switches, plugs, thermostats, blinds, shutters, "
+  "locks, and commands such as turn on, turn off, allume, éteins, ouvre, ferme, active, désactive.\n"
   "- chat: everything else, including current time, current date, or current day.\n\n"
+  "Examples:\n"
+  '- {"text":"What\'s the weather like in Lagos?"} -> {"service":"weather","confidence":0.95}\n'
+  '- {"text":"Quel temps fait-il à Paris ?"} -> {"service":"weather","confidence":0.95}\n'
+  '- {"text":"Are pollen levels high in Lyon today?"} -> {"service":"weather","confidence":0.95}\n'
+  '- {"text":"Est-ce qu\'il y a du pollen à Lyon en ce moment ?"} -> {"service":"weather","confidence":0.95}\n'
+  '- {"text":"Turn on the living room lights and set brightness to 80%"} -> {"service":"zigbee","confidence":0.98}\n'
+  '- {"text":"Allume les lumières du salon et mets la luminosité à 80%"} -> {"service":"zigbee","confidence":0.98}\n'
+  '- {"text":"Allume la lumière de la chambre"} -> {"service":"zigbee","confidence":0.98}\n'
+  '- {"text":"Éteins la lampe du salon"} -> {"service":"zigbee","confidence":0.98}\n'
+  '- {"text":"Éteins la lumière de la chambre"} -> {"service":"zigbee","confidence":0.98}\n'
+  '- {"text":"Turn on the bedroom light"} -> {"service":"zigbee","confidence":0.98}\n'
+  '- {"text":"Can you explain why the sky is blue like I\'m five?"} -> {"service":"chat","confidence":0.96}\n'
+  '- {"text":"Pourquoi le ciel est bleu ? Explique-moi simplement."} -> {"service":"chat","confidence":0.96}\n'
+  '- {"text":"Why is the sky blue?"} -> {"service":"chat","confidence":0.96}\n'
+  '- {"text":"Quelle heure est-il ?"} -> {"service":"chat","confidence":0.85}\n\n'
+  '- {"text":"Remind me to call Ada tomorrow at 9 AM"} -> {"service":"isinmi","confidence":0.96}\n'
+  '- {"text":"Rappelle-moi de sortir les poubelles ce soir à 20h"} -> {"service":"isinmi","confidence":0.96}\n'
+  '- {"text":"Schedule a weekly sync meeting every Monday at 10 AM"} -> {"service":"isinmi","confidence":0.96}\n'
+  '- {"text":"Planifie un cours de yoga tous les mardis à 18h30"} -> {"service":"isinmi","confidence":0.96}\n'
+  '- {"text":"Play BBC Radio 1"} -> {"service":"rediyo","confidence":0.96}\n'
+  '- {"text":"Mets France Inter s\'il te plaît"} -> {"service":"rediyo","confidence":0.96}\n'
+  '- {"text":"Play the latest episode of The Daily podcast"} -> {"service":"kansa","confidence":0.96}\n'
+  '- {"text":"Joue le dernier épisode de Transfert"} -> {"service":"kansa","confidence":0.96}\n\n'
   "Return nothing except the JSON object."
 )
 
@@ -52,7 +77,7 @@ class CommandAgent(AgentClient[RouteDecision]):
   def _command_model_settings(self) -> ModelSettings:
     return ModelSettings(
       temperature=0,
-      max_tokens=0,
+      max_tokens=80,
       timeout=self.settings.llm_request_timeout,
       seed=0,
       thinking=False,
@@ -70,6 +95,11 @@ class CommandAgent(AgentClient[RouteDecision]):
     )
 
   async def classify(self, message: str) -> RouteDecision:
+    match = rule_route(message)
+
+    if match is not None:
+      return RouteDecision(service=match.service, confidence=match.confidence)
+
     if self.uses_native_ollama:
       return await self._run_ollama(
         message,

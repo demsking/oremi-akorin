@@ -98,7 +98,17 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
     "value": ProcessRequest.model_validate(
       {
         "message": "Allume la lumière de la chambre",
-        "tags": ["room:bedroom-room"],
+        "tags": ["room:bedroom"],
+      }
+    ),
+  },
+  "Éteindre la lumière de la chambre (FR)": {
+    "summary": "Éteindre un appareil Zigbee",
+    "description": "Commande vocale ou textuelle pour éteindre un point de lumière spécifique dans la chambre.",
+    "value": ProcessRequest.model_validate(
+      {
+        "message": "Éteins la lumière de la chambre",
+        "tags": ["room:bedroom"],
       }
     ),
   },

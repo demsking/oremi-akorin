@@ -79,6 +79,7 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
     "heater",
     "lamp",
     "light",
+    "lights",
     "lock",
     "outlet",
     "plug",
@@ -86,7 +87,9 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
     "switch",
     "thermostat",
     "lumiere",
+    "lumieres",
     "lampe",
+    "lampes",
     "interrupteur",
     "volet",
     "prise",
@@ -99,29 +102,36 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
   ):
     match = RoutingMatch(Service.ZIGBEE, 0.98, "device action and device noun")
 
-  if match is None and (words & {"podcast", "podcasts"} or "podcast episode" in normalized):
+  if match is None and _is_explanation_request(normalized, words):
+    match = RoutingMatch(Service.CHAT, 0.96, "general explanation request")
+
+  if match is None and (
+    words & {"podcast", "podcasts"}
+    or "podcast episode" in normalized
+    or _contains_any(normalized, ("latest episode", "dernier episode"))
+  ):
     match = RoutingMatch(Service.KANSA, 0.96, "podcast terminology")
 
-  radio_actions = {"listen", "play", "stream", "tune"}
-  if match is None and (
-    "radio" in words
-    or ("station" in words and words & radio_actions)
-    or _contains_any(normalized, ("tune in", "radio station"))
-  ):
+  radio_actions = {"listen", "play", "stream", "tune", "mets", "met"}
+  radio_word_match = "radio" in words
+  station_action_match = "station" in words and bool(words & radio_actions)
+  radio_phrase_match = _contains_any(normalized, ("tune in", "radio station", "bbc radio", "france inter"))
+
+  if match is None and (radio_word_match or station_action_match or radio_phrase_match):
     match = RoutingMatch(Service.REDIYO, 0.96, "radio terminology")
 
   if match is None and (
-    words & {"alarm", "reminder", "timer"}
+    words & {"alarm", "reminder", "timer", "rappel", "rappelle", "planifie", "planifier"}
     or _contains_any(
       normalized,
-      ("remind me", "wake me", "schedule a", "set an alarm", "set a timer"),
+      ("remind me", "wake me", "schedule a", "set an alarm", "set a timer", "rappelle moi"),
     )
   ):
     match = RoutingMatch(Service.ISINMI, 0.96, "scheduling terminology")
 
   if match is None and (
-    words & {"weather", "forecast", "temperature", "pollen", "alert", "alerts", "warning", "warnings"}
-    or "air quality" in normalized
+    words & {"weather", "forecast", "temperature", "pollen", "alert", "alerts", "warning", "warnings", "meteo"}
+    or _contains_any(normalized, ("air quality", "quel temps"))
   ):
     match = RoutingMatch(Service.WEATHER, 0.95, "weather terminology")
 
@@ -137,6 +147,21 @@ def _normalize(text: str) -> str:
 
 def _contains_any(text: str, phrases: tuple[str, ...]) -> bool:
   return any(phrase in text for phrase in phrases)
+
+
+def _is_explanation_request(text: str, words: set[str]) -> bool:
+  explanation_markers = {
+    "explain",
+    "explique",
+    "expliquer",
+    "pourquoi",
+    "why",
+  }
+
+  if words & explanation_markers:
+    return True
+
+  return _contains_any(text, ("explain me", "explain simply", "explique moi", "explique simplement"))
 
 
 def _context_service(context: dict[str, Any]) -> Service | None:

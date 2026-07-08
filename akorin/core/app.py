@@ -34,6 +34,7 @@ from ..components.kansa import KansaClient
 from ..components.rediyo import RediyoClient
 from ..components.weather import WeatherClient
 from ..components.zigbee import ZigbeeComponent
+from ..llm.agents.response import ResponseAgent
 from ..llm.agents.zigbee_command import ZigbeeCommandAgent
 from ..services.orchestrator import Orchestrator
 from ..utils.logger import configure_logging
@@ -119,6 +120,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       await _pull_ollama_model(settings)
 
     zigbee_command_agent = ZigbeeCommandAgent(settings, client)
+    response_agent = ResponseAgent(settings, client)
 
     configured_components = (
       (Service.ISINMI, settings.isinmi_url, IsinmiClient),
@@ -140,7 +142,11 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     )
 
     mqtt = MQTTService(settings)
-    zigbee = ZigbeeComponent(mqtt, command_selector=zigbee_command_agent.select)
+    zigbee = ZigbeeComponent(
+      mqtt,
+      command_selector=zigbee_command_agent.select,
+      response_generator=response_agent.generate,
+    )
 
     handlers = {
       **components,

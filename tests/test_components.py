@@ -114,6 +114,14 @@ def configure_zigbee_devices(component: ZigbeeComponent, devices: dict[str, dict
   component.device_states = {name: {} for name in devices}
 
 
+def generated_zigbee_response(event: str, language: str, details: dict[str, Any]) -> str:
+  return f"{event}:{language}:{json.dumps(details, ensure_ascii=False, sort_keys=True)}"
+
+
+async def zigbee_response(event: str, language: str, details: dict[str, Any]) -> str:
+  return generated_zigbee_response(event, language, details)
+
+
 @pytest.mark.asyncio
 async def test_isinmi_uses_natural_language_request_contract():
   captured = None
@@ -474,7 +482,7 @@ async def test_zigbee_extracts_device_and_state_from_natural_language():
     calls.append((texts, catalog))
     return {"device": "Lumière de la chambre", "payload": {"state": "ON"}, "confidence": 0.91}
 
-  component = ZigbeeComponent(mqtt_service, command_selector=select_command)
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
   configure_zigbee_devices(
     component,
     {
@@ -494,7 +502,11 @@ async def test_zigbee_extracts_device_and_state_from_natural_language():
     [],
   )
 
-  assert message == "Command sent to Lumière de la chambre."
+  assert message == generated_zigbee_response(
+    "zigbee_command_sent",
+    "en",
+    {"device": "Lumière de la chambre", "command": {"state": "ON"}},
+  )
   assert data == {"device": "Lumière de la chambre", "command": {"state": "ON"}}
   assert component.device_states["Lumière de la chambre"] == {"state": "ON"}
   assert mqtt_service.client.published == [
@@ -527,12 +539,16 @@ async def test_zigbee_extracts_french_unaccented_off_command():
   async def select_command(texts, catalog):
     return {"device": "Lumière de la chambre", "payload": {"state": "OFF"}}
 
-  component = ZigbeeComponent(mqtt_service, command_selector=select_command)
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
   configure_zigbee_devices(component, {"Lumière de la chambre": light_device("Lumière de la chambre")})
 
   message, data = await component.process("eteinds la lumière de la chambre", "fr", {}, [])
 
-  assert message == "Commande envoyée à Lumière de la chambre."
+  assert message == generated_zigbee_response(
+    "zigbee_command_sent",
+    "fr",
+    {"device": "Lumière de la chambre", "command": {"state": "OFF"}},
+  )
   assert data == {"device": "Lumière de la chambre", "command": {"state": "OFF"}}
   assert mqtt_service.client.published == [
     ("zigbee2mqtt/Lumière de la chambre/set", '{"state": "OFF"}'),
@@ -551,7 +567,7 @@ async def test_zigbee_narrows_catalog_before_llm_when_device_is_named():
       return {"device": "Lumière de la chambre", "payload": {"state": "OFF"}}
     return {"device": None, "payload": {}, "confidence": 0}
 
-  component = ZigbeeComponent(mqtt_service, command_selector=select_command)
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
   configure_zigbee_devices(
     component,
     {
@@ -571,7 +587,11 @@ async def test_zigbee_narrows_catalog_before_llm_when_device_is_named():
   message, data = await component.process("éteins la lumière de la chambre", "fr", {}, [])
 
   assert [device["name"] for device in calls[0]] == ["Lumière de la chambre"]
-  assert message == "Commande envoyée à Lumière de la chambre."
+  assert message == generated_zigbee_response(
+    "zigbee_command_sent",
+    "fr",
+    {"device": "Lumière de la chambre", "command": {"state": "OFF"}},
+  )
   assert data == {"device": "Lumière de la chambre", "command": {"state": "OFF"}}
   assert mqtt_service.client.published == [
     ("zigbee2mqtt/Lumière de la chambre/set", '{"state": "OFF"}'),
@@ -588,7 +608,7 @@ async def test_zigbee_uses_llm_command_selector_for_multilingual_operation_and_d
     calls.append((texts, catalog))
     return {"device": "Bedroom light", "payload": {"brightness": 64, "state": "ON"}, "confidence": 0.88}
 
-  component = ZigbeeComponent(mqtt_service, command_selector=select_command)
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
   configure_zigbee_devices(component, {"Bedroom light": light_device("Lumière de la chambre")})
 
   message, data = await component.process("allume doucement la lumière de la chambre", "fr", {}, [])
@@ -596,7 +616,11 @@ async def test_zigbee_uses_llm_command_selector_for_multilingual_operation_and_d
   assert calls[0][0] == ["allume doucement la lumière de la chambre"]
   assert calls[0][1][0]["name"] == "Bedroom light"
   assert calls[0][1][0]["mqtt_topic"] == "Lumière de la chambre"
-  assert message == "Commande envoyée à Bedroom light."
+  assert message == generated_zigbee_response(
+    "zigbee_command_sent",
+    "fr",
+    {"device": "Bedroom light", "command": {"brightness": 64, "state": "ON"}},
+  )
   assert data == {"device": "Bedroom light", "command": {"brightness": 64, "state": "ON"}}
   assert mqtt_service.client.published == [
     ("zigbee2mqtt/Lumière de la chambre/set", '{"brightness": 64, "state": "ON"}'),
@@ -611,7 +635,7 @@ async def test_zigbee_uses_context_when_extracting_natural_language_command():
   async def select_command(texts, catalog):
     return {"device": "Bedroom switch", "payload": {"state": "ON"}}
 
-  component = ZigbeeComponent(mqtt_service, command_selector=select_command)
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
   configure_zigbee_devices(
     component,
     {
@@ -635,7 +659,11 @@ async def test_zigbee_uses_context_when_extracting_natural_language_command():
     [],
   )
 
-  assert message == "Command sent to Bedroom switch."
+  assert message == generated_zigbee_response(
+    "zigbee_command_sent",
+    "en",
+    {"device": "Bedroom switch", "command": {"state": "ON"}},
+  )
   assert data == {"device": "Bedroom switch", "command": {"state": "ON"}}
   assert mqtt_service.client.published == [
     ("zigbee2mqtt/Interrupteur de la chambre/set", '{"state": "ON"}'),
@@ -650,7 +678,7 @@ async def test_zigbee_rejects_llm_payload_not_exposed_by_device():
   async def select_command(texts, catalog):
     return {"device": "Bedroom switch", "payload": {"brightness": 80}}
 
-  component = ZigbeeComponent(mqtt_service, command_selector=select_command)
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
   configure_zigbee_devices(
     component,
     {
@@ -664,8 +692,62 @@ async def test_zigbee_rejects_llm_payload_not_exposed_by_device():
 
   message, data = await component.process("mets la lumière à 80 pour cent", "fr", {}, [])
 
-  assert message == "Précisez un appareil et l'opération à appliquer."
-  assert data == {"required": ["operation"]}
+  assert message == generated_zigbee_response(
+    "zigbee_missing_command",
+    "fr",
+    {"available_devices": ["Bedroom switch"], "reason": "missing_operation", "required": ["operation"]},
+  )
+  assert data == {"available_devices": ["Bedroom switch"], "reason": "missing_operation", "required": ["operation"]}
+  assert mqtt_service.client.published == []
+
+
+@pytest.mark.asyncio
+async def test_zigbee_reports_requested_device_not_found_with_available_devices():
+  mqtt_service = FakeMQTTService()
+  mqtt_service.client = FakeZigbeeClient()
+
+  async def select_command(texts, catalog):
+    return {"device": None, "payload": {}, "confidence": 0}
+
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
+  configure_zigbee_devices(component, {"Bedroom light": light_device("Lumière de la chambre")})
+
+  message, data = await component.process("Turn on the living room lights and set brightness to 80%", "en", {}, [])
+
+  expected = {
+    "available_devices": ["Bedroom light"],
+    "reason": "requested_device_not_found",
+    "requested_device": "Turn on the living room lights and set brightness to 80%",
+    "required": ["device", "operation"],
+  }
+  assert message == generated_zigbee_response("zigbee_missing_command", "en", expected)
+  assert data == expected
+  assert mqtt_service.client.published == []
+
+
+@pytest.mark.asyncio
+async def test_zigbee_suggests_similar_device_instead_of_reporting_not_found():
+  mqtt_service = FakeMQTTService()
+  mqtt_service.client = FakeZigbeeClient()
+
+  async def select_command(texts, catalog):
+    return {"device": None, "payload": {}, "confidence": 0}
+
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
+  configure_zigbee_devices(component, {"Living room lamp": light_device("Living room lamp")})
+
+  message, data = await component.process("Turn on the living room lights and set brightness to 80%", "en", {}, [])
+
+  expected = {
+    "available_devices": ["Living room lamp"],
+    "reason": "device_confirmation_required",
+    "requested_device": "Turn on the living room lights and set brightness to 80%",
+    "required": ["device"],
+    "suggested_device": "Living room lamp",
+    "suggested_devices": ["Living room lamp"],
+  }
+  assert message == generated_zigbee_response("zigbee_missing_command", "en", expected)
+  assert data == expected
   assert mqtt_service.client.published == []
 
 
@@ -677,7 +759,7 @@ async def test_zigbee_normalizes_llm_binary_and_enum_values():
   async def select_command(texts, catalog):
     return {"device": "Radiateur", "payload": {"state": "on", "system_mode": "HEAT"}}
 
-  component = ZigbeeComponent(mqtt_service, command_selector=select_command)
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
   configure_zigbee_devices(
     component,
     {
@@ -696,7 +778,11 @@ async def test_zigbee_normalizes_llm_binary_and_enum_values():
 
   message, data = await component.process("mets le radiateur en chauffe", "fr", {}, [])
 
-  assert message == "Commande envoyée à Radiateur."
+  assert message == generated_zigbee_response(
+    "zigbee_command_sent",
+    "fr",
+    {"device": "Radiateur", "command": {"state": "ON", "system_mode": "heat"}},
+  )
   assert data == {"device": "Radiateur", "command": {"state": "ON", "system_mode": "heat"}}
   assert mqtt_service.client.published == [
     ("zigbee2mqtt/Radiateur/set", '{"state": "ON", "system_mode": "heat"}'),
@@ -740,7 +826,7 @@ async def test_zigbee_updates_cached_state_from_device_topic_and_answers_status_
       "confidence": 0.92,
     }
 
-  component = ZigbeeComponent(mqtt_service, command_selector=select_command)
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
   component.start()
   await mqtt_service.handlers[DEVICES_TOPIC](json.dumps([thermometer_device("Thermomètre de la chambre")]).encode())
   mqtt_service.handlers["zigbee2mqtt/Thermomètre de la chambre"](
@@ -749,7 +835,22 @@ async def test_zigbee_updates_cached_state_from_device_topic_and_answers_status_
 
   message, data = await component.process("quelle est la température dans la chambre", "fr", {}, [])
 
-  assert message == "Thermomètre de la chambre : température 21.6 °C."
+  assert message == generated_zigbee_response(
+    "zigbee_state",
+    "fr",
+    {
+      "device": "Thermomètre de la chambre",
+      "state": {"temperature": 21.6},
+      "state_catalog": {
+        "temperature": {
+          "property": "temperature",
+          "type": "numeric",
+          "description": "Measured temperature.",
+          "unit": "°C",
+        }
+      },
+    },
+  )
   assert data == {"device": "Thermomètre de la chambre", "state": {"temperature": 21.6}}
   assert component.device_states["Thermomètre de la chambre"] == {"temperature": 21.6, "humidity": 48}
 
@@ -768,11 +869,25 @@ async def test_zigbee_formats_binary_state_as_human_readable_sentence():
       "confidence": 1,
     }
 
-  component = ZigbeeComponent(mqtt_service, command_selector=select_command)
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
   configure_zigbee_devices(component, {"Lumière de la chambre": light_device("Lumière de la chambre")})
   component.device_states["Lumière de la chambre"] = {"state": "OFF"}
 
   message, data = await component.process("est-ce que la lumière de la chambre est allumée", "fr", {}, [])
 
-  assert message == "Lumière de la chambre est éteinte."
+  assert message == generated_zigbee_response(
+    "zigbee_state",
+    "fr",
+    {
+      "device": "Lumière de la chambre",
+      "state": {"state": "OFF"},
+      "state_catalog": {
+        "state": {
+          "property": "state",
+          "type": "binary",
+          "description": "Turn the light on or off.",
+        }
+      },
+    },
+  )
   assert data == {"device": "Lumière de la chambre", "state": {"state": "OFF"}}

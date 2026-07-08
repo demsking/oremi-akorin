@@ -11,12 +11,13 @@ from pydantic_ai.models.test import TestModel
 
 from akorin.core.constants import Service
 from akorin.core.settings import Settings
+from akorin.api.agent import PAYLOAD_EXAMPLES
 from akorin.llm.agent import AgentClient
 from akorin.llm.agents.chat import ChatAgent
 from akorin.llm.agents.chat_tools import ChatToolsAgent
 from akorin.llm.agents.command import CommandAgent
+from akorin.llm.agents.response import ResponseAgent
 from akorin.llm.agents.spellcheck import SpellCheckAgent
-from akorin.llm.agents.translator import TranslatorAgent
 from akorin.llm.agents.zigbee_command import ZigbeeCommandAgent
 from akorin.services.tools import DateTimeTool
 from akorin.services.tools import ToolRegistry
@@ -67,27 +68,89 @@ async def test_router_generation_is_deterministic(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_spellcheck_and_translation_prompts_return_only_generated_text(monkeypatch):
+async def test_command_agent_classifies_all_payload_examples(monkeypatch):
+  expected_services = {
+    "Weather forecast (EN)": Service.WEATHER,
+    "Météo (FR)": Service.WEATHER,
+    "Pollen count (EN)": Service.WEATHER,
+    "Alerte Pollen (FR)": Service.WEATHER,
+    "Control Zigbee device (EN)": Service.ZIGBEE,
+    "Contrôler un appareil Zigbee (FR)": Service.ZIGBEE,
+    "Allumer la lumière de la chambre (FR)": Service.ZIGBEE,
+    "Éteindre la lumière de la chambre (FR)": Service.ZIGBEE,
+    "General Chat (EN)": Service.CHAT,
+    "Discussion générale (FR)": Service.CHAT,
+    "Set a reminder (EN)": Service.ISINMI,
+    "Créer un rappel (FR)": Service.ISINMI,
+    "Schedule recurring event (EN)": Service.ISINMI,
+    "Planifier un événement (FR)": Service.ISINMI,
+    "Play Radio (EN)": Service.REDIYO,
+    "Lancer la radio (FR)": Service.REDIYO,
+    "Play Podcast (EN)": Service.KANSA,
+    "Lancer un podcast (FR)": Service.KANSA,
+  }
+  use_model(monkeypatch, TestModel(custom_output_args={"service": "chat", "confidence": 0.1}))
+
+  async with httpx.AsyncClient() as client:
+    agent = CommandAgent(isolated_settings(), client)
+
+    for name, example in PAYLOAD_EXAMPLES.items():
+      decision = await agent.classify(example["value"].message)
+
+      assert decision.service == expected_services[name], name
+
+
+@pytest.mark.asyncio
+async def test_spellcheck_prompt_returns_only_generated_text(monkeypatch):
   prompts = []
 
   def handler(messages, info: AgentInfo) -> ModelResponse:
     prompts.append(str(messages))
-    response = "Quelle heure est-il ?" if len(prompts) == 1 else "What time is it?"
-    return ModelResponse(parts=[TextPart(response)])
+    return ModelResponse(parts=[TextPart("Quelle heure est-il ?")])
 
   use_model(monkeypatch, FunctionModel(handler))
 
   async with httpx.AsyncClient() as client:
     spellcheck_agent = SpellCheckAgent(isolated_settings(), client)
-    translator_agent = TranslatorAgent(isolated_settings(), client)
     corrected = await spellcheck_agent.check("quelle heure est il ?", "fr")
-    translated = await translator_agent.translate(corrected, "fr", "en")
 
   assert corrected == "Quelle heure est-il ?"
-  assert translated == "What time is it?"
   assert "Correct spelling, grammar, punctuation" in prompts[0]
-  assert "Source language: fr" in prompts[1]
-  assert "Target language: en" in prompts[1]
+
+
+@pytest.mark.asyncio
+async def test_response_agent_generates_contextual_user_message():
+  class FakeMessage:
+    content = "La lumière est allumée."
+    tool_calls = None
+
+  class FakeResponse:
+    message = FakeMessage()
+
+  class FakeOllamaClient:
+    def __init__(self):
+      self.request = None
+
+    async def chat(self, **kwargs):
+      self.request = kwargs
+      return FakeResponse()
+
+  async with httpx.AsyncClient() as client:
+    agent = ResponseAgent(ollama_settings(), client)
+    fake_client = FakeOllamaClient()
+    agent.ollama_client = fake_client
+    response = await agent.generate(
+      "zigbee_command_sent",
+      "fr",
+      {"device": "Lumière de la chambre", "command": {"state": "ON"}},
+    )
+
+  assert response == "La lumière est allumée."
+  messages = fake_client.request["messages"]
+  assert messages[0]["role"] == "system"
+  assert "Return only the message intended for the user" in messages[0]["content"]
+  assert "Event type: zigbee_command_sent" in messages[1]["content"]
+  assert '"device": "Lumière de la chambre"' in messages[1]["content"]
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,9 @@ from akorin.core.constants import Service
 from akorin.core.models import ProcessRequest
 from akorin.core.exceptions import ComponentUnavailable
 from akorin.core.exceptions import ComponentRequestError
+from akorin.core.settings import Settings
 from akorin.llm.agent import ChatResult
+from akorin.llm.agents.command import RouteDecision
 from akorin.services.orchestrator import Orchestrator
 from akorin.services.orchestrator import heuristic_route
 from akorin.services.router import rule_route
@@ -40,6 +42,53 @@ class FakeOllama:
     message = "discussion de secours" if language == "fr" else "fallback chat"
     return ChatResult(message=message, tools=self.tools)
 
+
+class FakeSpellcheckAgent:
+  def __init__(self, fake):
+    self.fake = fake
+
+  async def check(self, text, language):
+    return await self.fake.spellcheck(text, language)
+
+
+class FakeCommandAgent:
+  def __init__(self, fake):
+    self.fake = fake
+
+  async def classify(self, text):
+    try:
+      service, confidence = await self.fake.route(text, "en")
+      return RouteDecision(service=service, confidence=confidence)
+    except AttributeError:
+      raise httpx.ConnectError("offline") from None
+
+
+class FakeChatToolsAgent:
+  def __init__(self, fake):
+    self.fake = fake
+
+  async def chat(self, text, language, context, tools):
+    return await self.fake.chat_with_tools(text, language, context, tools)
+
+
+class FakeResponseAgent:
+  async def generate(self, event, language, details):
+    return generated_response(event, language, details)
+
+
+def generated_response(event, language, details):
+  return f"{event}:{language}:{details}"
+
+
+def make_orchestrator(fake, handlers, tools=None):
+  orchestrator = Orchestrator(Settings(llm_model="test", ollama_base_url=None), httpx.AsyncClient(), handlers, tools)
+  orchestrator.spellcheck_agent = FakeSpellcheckAgent(fake)
+  orchestrator.command_agent = FakeCommandAgent(fake)
+  orchestrator.chat_tools_agent = FakeChatToolsAgent(fake)
+  orchestrator.response_agent = FakeResponseAgent()
+  return orchestrator
+
+
 class FakeComponent:
   def __init__(self, unavailable=False):
     self.unavailable = unavailable
@@ -54,8 +103,10 @@ class FakeResultComponent:
   def __init__(self, message, data):
     self.message = message
     self.data = data
+    self.calls = []
 
   async def process(self, text, language, context, tags):
+    self.calls.append((text, language, context, tags))
     return self.message, self.data
 
 
@@ -113,12 +164,29 @@ def test_rule_router_accepts_explicit_service_context():
 def test_rule_router_ignores_non_service_context_values():
   match = rule_route("Are there alerts?", {"service": "air-quality"})
 
-  assert match is None
+  assert match is not None
+  assert match.service == Service.WEATHER
+  assert match.reason == "weather terminology"
+
+
+@pytest.mark.parametrize(
+  "text",
+  [
+    "Pourquoi le ciel est bleu ? Explique-moi simplement.",
+    "Why is the sky blue?",
+  ],
+)
+def test_rule_router_keeps_general_explanations_in_chat(text):
+  match = rule_route(text)
+
+  assert match is not None
+  assert match.service == Service.CHAT
+  assert match.reason == "general explanation request"
 
 
 @pytest.mark.asyncio
 async def test_process_uses_router_fallback_and_component():
-  orchestrator = Orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent()})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent()})
   result = await orchestrator.process(ProcessRequest(text="Weather in London"))
   assert result.service == Service.WEATHER
   assert result.message == "Sunny"
@@ -131,7 +199,7 @@ async def test_rediyo_result_selects_speak_then_play_commands():
     "Here is France Culture.",
     {"station": {"name": "France Culture", "url": "https://radio.example/live.mp3"}},
   )
-  orchestrator = Orchestrator(FakeOllama(), {Service.REDIYO: component})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.REDIYO: component})
 
   result = await orchestrator.process(ProcessRequest(text="Play France Culture radio", language="en"))
 
@@ -157,7 +225,7 @@ async def test_isinmi_result_selects_speak_then_reminder_commands():
       },
     },
   )
-  orchestrator = Orchestrator(FakeOllama(), {Service.ISINMI: component})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.ISINMI: component})
 
   result = await orchestrator.process(
     ProcessRequest(
@@ -181,7 +249,7 @@ async def test_isinmi_result_selects_speak_then_reminder_commands():
 @pytest.mark.asyncio
 async def test_incomplete_media_result_falls_back_to_automatic_message_speech():
   component = FakeResultComponent("No playable station found.", {"station": {"name": "Unknown"}})
-  orchestrator = Orchestrator(FakeOllama(), {Service.REDIYO: component})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.REDIYO: component})
 
   result = await orchestrator.process(ProcessRequest(text="Play an unknown station", language="en"))
 
@@ -201,7 +269,7 @@ async def test_incomplete_media_result_falls_back_to_automatic_message_speech():
   ],
 )
 async def test_direct_device_controls_bypass_conversational_processing(text, language, command):
-  orchestrator = Orchestrator(FakeOllama(), {})
+  orchestrator = make_orchestrator(FakeOllama(), {})
 
   result = await orchestrator.process(ProcessRequest(message=text, language=language))
 
@@ -211,7 +279,7 @@ async def test_direct_device_controls_bypass_conversational_processing(text, lan
 
 @pytest.mark.asyncio
 async def test_invalid_direct_device_control_is_not_emitted():
-  orchestrator = Orchestrator(FakeOllama(), {})
+  orchestrator = make_orchestrator(FakeOllama(), {})
 
   result = await orchestrator.process(ProcessRequest(text="set volume to 101", language="en"))
 
@@ -221,9 +289,9 @@ async def test_invalid_direct_device_control_is_not_emitted():
 
 @pytest.mark.asyncio
 async def test_processing_emits_correlated_debug_information(caplog):
-  orchestrator = Orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent()})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent()})
 
-  with caplog.at_level(logging.DEBUG, logger="oremi-akorin"):
+  with caplog.at_level(logging.DEBUG, logger="akorin.services.orchestrator"):
     await orchestrator.process(
       ProcessRequest(
         text="Weather in London",
@@ -267,9 +335,9 @@ async def test_non_english_request_is_processed_in_original_language(caplog):
       calls.append(("chat", text, language))
       return ChatResult(message="Il est 14 h 32.", tools=[])
 
-  orchestrator = Orchestrator(NormalizingOllama(), {})
+  orchestrator = make_orchestrator(NormalizingOllama(), {})
 
-  with caplog.at_level(logging.DEBUG, logger="oremi-akorin"):
+  with caplog.at_level(logging.DEBUG, logger="akorin.services.orchestrator"):
     result = await orchestrator.process(ProcessRequest(text="quelle heure est il ?", language="fr"))
 
   assert calls == [
@@ -289,33 +357,83 @@ async def test_non_english_request_is_processed_in_original_language(caplog):
 
 
 @pytest.mark.asyncio
+async def test_original_smart_home_request_routes_to_zigbee_when_spellcheck_mangles_text():
+  class ManglingOllama(FakeOllama):
+    async def spellcheck(self, text, language):
+      assert text == "Allume la lumière de la chambre"
+      return "Éteindre le feu dans votre chambre."
+
+  component = FakeResultComponent("response generated by zigbee", {"device": "Lumière de la chambre"})
+  orchestrator = make_orchestrator(ManglingOllama(), {Service.ZIGBEE: component})
+
+  result = await orchestrator.process(ProcessRequest(text="Allume la lumière de la chambre", language="fr"))
+
+  assert result.service == Service.ZIGBEE
+  assert result.message == "response generated by zigbee"
+  assert result.confidence == 0.98
+  assert component.calls == [
+    (
+      "Éteindre le feu dans votre chambre.",
+      "fr",
+      {"_oremi_original_text": "Allume la lumière de la chambre"},
+      [],
+    )
+  ]
+
+
+@pytest.mark.asyncio
+async def test_general_french_explanation_uses_chat_even_if_classifier_would_choose_weather():
+  class WeatherBiasedOllama(FakeOllama):
+    async def route(self, text, language):
+      return Service.WEATHER, 0.95
+
+    async def chat_with_tools(self, text, language, context, tools):
+      assert language == "fr"
+      return ChatResult(message="Le ciel paraît bleu à cause de la diffusion de la lumière.", tools=[])
+
+  orchestrator = make_orchestrator(WeatherBiasedOllama(), {Service.WEATHER: FakeComponent(unavailable=True)})
+
+  result = await orchestrator.process(ProcessRequest(text="Pourquoi le ciel est bleu ? Explique-moi simplement."))
+
+  assert result.ok is True
+  assert result.language.value == "fr"
+  assert result.service == Service.CHAT
+  assert result.message == "Le ciel paraît bleu à cause de la diffusion de la lumière."
+  assert result.data == {}
+
+
+@pytest.mark.asyncio
 async def test_component_failure_returns_an_explanatory_response():
-  orchestrator = Orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent(unavailable=True)})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent(unavailable=True)})
   result = await orchestrator.process(ProcessRequest(text="Weather in London"))
   assert result.ok is False
   assert result.service == Service.WEATHER
-  assert result.message == "I can't retrieve the weather right now. Please try again shortly."
+  assert result.message == generated_response("component_temporarily_unavailable", "en", {"service": "weather"})
   assert result.data == {"error": {"type": "service_temporarily_unavailable"}}
   assert "offline" not in result.model_dump_json()
 
 
 @pytest.mark.asyncio
 async def test_component_failure_message_uses_request_language():
-  orchestrator = Orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent(unavailable=True)})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent(unavailable=True)})
   result = await orchestrator.process(ProcessRequest(text="Météo à Paris", language="fr"))
 
-  assert result.message == "Je ne parviens pas à obtenir la météo actuelle. Veuillez réessayer sous peu."
+  assert result.message == generated_response("component_temporarily_unavailable", "fr", {"service": "weather"})
   assert "offline" not in result.model_dump_json()
 
 
 @pytest.mark.asyncio
 async def test_missing_component_input_returns_help_without_internal_details():
-  orchestrator = Orchestrator(FakeOllama(), {Service.WEATHER: FakeIncompleteRequestComponent()})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.WEATHER: FakeIncompleteRequestComponent()})
   result = await orchestrator.process(ProcessRequest(text="Weather alert", language="en"))
 
   assert result.ok is False
   assert result.service == Service.WEATHER
-  assert result.message == "Please share a location so I can check alerts for that area."
+  assert result.message == generated_response(
+    "component_needs_more_information",
+    "en",
+    {"service": "weather", "request": "Weather alert"},
+  )
   assert result.data == {"error": {"type": "more_information_required"}}
   assert "context.lat" not in result.model_dump_json()
 
@@ -323,7 +441,7 @@ async def test_missing_component_input_returns_help_without_internal_details():
 @pytest.mark.asyncio
 async def test_native_ollama_tool_result_is_exposed_in_response():
   tool_result = ToolResult(name="get_current_datetime", data={"time": "14:32:00", "timezone": "UTC"})
-  orchestrator = Orchestrator(FakeOllama([tool_result]), {})
+  orchestrator = make_orchestrator(FakeOllama([tool_result]), {})
 
   result = await orchestrator.process(ProcessRequest(text="quelle heure est il ?"))
 

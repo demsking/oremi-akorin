@@ -49,7 +49,6 @@ services:
       - 31777:1777
     environment:
       OLLAMA_BASEURL: http://ollama:11434
-      OLLAMA_MODEL: qwen3.5:2b
 
   rediyo:
     image: demsking/oremi-rediyo-agent
@@ -62,7 +61,6 @@ services:
       - ~/.config/oremi-rediyo-agent:/var/cache/oremi-rediyo-agent
     environment:
       OLLAMA_BASEURL: http://ollama:11434
-      OLLAMA_MODEL: qwen3.5:2b
 
   kansa:
     image: demsking/oremi-kansa-agent
@@ -75,5 +73,4 @@ services:
       - ~/.config/oremi-kansa-agent:/var/cache/oremi-kansa-agent
     environment:
       OLLAMA_BASEURL: http://ollama:11434
-      OLLAMA_MODEL: qwen3.5:2b
 ...

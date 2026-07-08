@@ -52,4 +52,4 @@ class IsinmiClient(ComponentClient):
       json=payload.model_dump(),
     )
 
-    return self.parse_response(data)
+    return data["response_message"], data["data"]

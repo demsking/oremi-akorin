@@ -21,7 +21,6 @@ from uuid import uuid4
 import httpx
 
 from ..components.zigbee import ORIGINAL_TEXT_CONTEXT_KEY
-from ..core.constants import Language
 from ..core.constants import Service
 from ..core.exceptions import ComponentRequestError
 from ..core.exceptions import ComponentUnavailable
@@ -31,6 +30,7 @@ from ..core.settings import Settings
 from ..llm.agents.chat import ChatAgent
 from ..llm.agents.chat_tools import ChatToolsAgent
 from ..llm.agents.command import CommandAgent
+from ..llm.agents.response import ResponseAgent
 from ..llm.agents.spellcheck import SpellCheckAgent
 from ..utils.language import detect_language
 from .device_commands import select_device_commands
@@ -78,6 +78,7 @@ class Orchestrator:
     self.chat_agent = ChatAgent(settings, client)
     self.chat_tools_agent = ChatToolsAgent(settings, client)
     self.command_agent = CommandAgent(settings, client)
+    self.response_agent = ResponseAgent(settings, client)
     self.spellcheck_agent = SpellCheckAgent(settings, client)
 
   async def _route(self, message: str, language: str) -> tuple[Service, float]:
@@ -95,7 +96,12 @@ class Orchestrator:
     direct_device_control = select_direct_device_command(request.message, language)
 
     if direct_device_control is not None:
-      message, command = direct_device_control
+      _, command = direct_device_control
+      message = await self.response_agent.generate(
+        "device_command_applied",
+        language.value,
+        {"command": command.model_dump(mode="json", exclude_none=True), "request": request.message},
+      )
       return ProcessResponse(
         input=request.message,
         language=language,
@@ -108,6 +114,7 @@ class Orchestrator:
     processing_message = request.message
     processing_language = language
     ok = True
+    original_routing_match = rule_route(request.message, request.context)
 
     logger.debug(
       f"[{request_id}] Processing started: input_chars={len(request.message)} "
@@ -133,7 +140,7 @@ class Orchestrator:
       processing_language = language
 
     routing_started = perf_counter()
-    routing_match = rule_route(processing_message, request.context)
+    routing_match = original_routing_match or rule_route(processing_message, request.context)
 
     if routing_match is not None:
       service = routing_match.service
@@ -209,13 +216,21 @@ class Orchestrator:
       logger.info(f"[{request_id}] {service} needs more information: {exception.reason}")
 
       ok = False
-      message = exception.message_fr if processing_language == Language.FR else exception.message_en
+      message = await self.response_agent.generate(
+        "component_needs_more_information",
+        processing_language.value,
+        {"service": service.value, "request": request.message},
+      )
       data = {"error": {"type": "more_information_required"}}
     except ComponentUnavailable as exception:
       logger.warning(f"[{request_id}] {service} failed to process the request: {exception.reason}")
 
       ok = False
-      message = self._component_failure_message(exception.component, processing_language)
+      message = await self.response_agent.generate(
+        "component_temporarily_unavailable",
+        processing_language.value,
+        {"service": exception.component.value if isinstance(exception.component, Service) else str(exception.component)},
+      )
       data = {"error": {"type": "service_temporarily_unavailable"}}
     except (httpx.HTTPError, KeyError) as exception:
       logger.warning(f"[{request_id}] {service} failed, falling back to chat: {exception}")
@@ -233,10 +248,10 @@ class Orchestrator:
           service = Service.TOOL
           confidence = 1.0
       except httpx.HTTPError:
-        message = (
-          "I cannot reach the requested service right now."
-          if processing_language == Language.EN
-          else "Je ne peux pas joindre le service demandé pour le moment."
+        message = await self.response_agent.generate(
+          "component_temporarily_unavailable",
+          processing_language.value,
+          {"service": service.value},
         )
 
       data = {"fallback_reason": str(exception)}
@@ -264,35 +279,3 @@ class Orchestrator:
     )
 
     return response
-
-  def _component_failure_message(self, component: Service, language: Language) -> str:
-    return FAILURE_MESSAGES.get(component, FAILURE_FALLBACK_MESSAGE)[language]
-
-
-FAILURE_MESSAGES: dict[Service, dict[Language, str]] = {
-  Service.ISINMI: {
-    Language.EN: "I can't access your reminders and alarms right now. Please try again shortly.",
-    Language.FR: "Je n'arrive pas à accéder à vos rappels et alarmes pour l'instant. Réessayez dans un instant, je vous prie.",
-  },
-  Service.WEATHER: {
-    Language.EN: "I can't retrieve the weather right now. Please try again shortly.",
-    Language.FR: "Je ne parviens pas à obtenir la météo actuelle. Veuillez réessayer sous peu.",
-  },
-  Service.REDIYO: {
-    Language.EN: "I can't find a radio station right now. Please try again shortly.",
-    Language.FR: "Je ne trouve aucune station de radio pour le moment. Réessayez dans quelques instants.",
-  },
-  Service.KANSA: {
-    Language.EN: "I can't find a podcast right now. Please try again shortly.",
-    Language.FR: "Aucun podcast n'est disponible actuellement. Veuillez renouveler votre essai dans un moment.",
-  },
-  Service.ZIGBEE: {
-    Language.EN: "I can't control your connected device right now. Please try again shortly.",
-    Language.FR: "Je ne peux pas commander votre appareil connecté pour l'instant. Réessayez un peu plus tard.",
-  },
-}
-
-FAILURE_FALLBACK_MESSAGE = {
-  Language.EN: "I can't complete your request right now. Please try again shortly.",
-  Language.FR: "Je ne peux pas traiter votre demande actuellement. Réessayez dans quelques instants, s'il vous plaît.",
-}
