@@ -39,13 +39,6 @@ Therefore:
 
 ## Development Setup
 
-This project supports a dual setup for development: **Dev Containers** for an
-isolated development environment in VS Code and **Devbox** for consistent
-tooling when working in an external terminal. Follow the steps below to set up
-your environment.
-
-### Using Devbox
-
 Devbox ensures consistent tooling and dependencies when working outside of VS
 Code, such as in an external terminal.
 
@@ -80,19 +73,6 @@ Code, such as in an external terminal.
      ```
    - This will launch a preconfigured Tmux session. Refer to the
      [.tmuxinator.yml](.tmuxinator.yml) file for details.
-
-### Key Notes
-
-- **Dev Containers** are ideal for development within VS Code, providing an
-  isolated and consistent environment with preconfigured debug launchers.
-- **Devbox** ensures consistent tooling and dependencies when working in an
-  external terminal, complementing the Dev Container setup.
-- Both setups share the same `make install` and `make shell` commands, ensuring
-  consistency across environments.
-
-By using both Dev Containers and Devbox, you get the best of both worlds: a
-seamless development experience in VS Code and consistent tooling in your
-terminal.
 
 ## Makefile Targets
 
