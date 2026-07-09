@@ -142,11 +142,6 @@ services:
       OREMI_AKORIN_MQTT_BROKER: mosquitto
     env_file:
       - .env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5020/health/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
   mosquitto:
     image: eclipse-mosquitto:2.0.18
