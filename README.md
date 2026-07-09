@@ -16,7 +16,7 @@ gives voice to user intent. Rather than performing every task itself, Akọrin
 listens, interprets, and orchestrates communication between specialized services,
 acting as the expressive voice and natural-language entry point of the platform.
 
-![Oremi Akọrin Logo](htdocs/logo.png)
+![Oremi Akọrin Logo](https://gitlab.com/demsking/oremi-akorin/-/raw/main/htdocs/logo.png)
 
 ## Documentation
 
@@ -31,9 +31,9 @@ and automated testing.
 
 For detailed information on setting up your development environment, running
 tests, code style guidelines, and the pull request process, please refer to
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](https://gitlab.com/demsking/oremi-akorin/-/blob/main/CONTRIBUTING.md).
 
-,## Versioning
+## Versioning
 
 This project adheres to [Semantic Versioning](https://semver.org/) (SemVer).
 Version numbers follow the `MAJOR.MINOR.PATCH` format:
@@ -42,14 +42,6 @@ Version numbers follow the `MAJOR.MINOR.PATCH` format:
 - **MINOR** version increments for backward-compatible new functionality
 - **PATCH** version increments for backward-compatible bug fixes
 
-The current version can be found in `pyproject.toml` or by running:
-
-```bash
-oremi-akorin --version
-```
-
-Pre-release versions (alpha, beta, release candidates) may be published to PyPI for testing purposes and are clearly marked with version suffixes.
-
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+Licensed under the Apache License, Version 2.0. See [LICENSE](https://gitlab.com/demsking/oremi-akorin/-/blob/main/LICENSE).
