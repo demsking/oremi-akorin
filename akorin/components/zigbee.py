@@ -478,14 +478,19 @@ class ZigbeeComponent:
       "turn",
       "switch",
       "light",
+      "lamp",
       "up",
       "allume",
       "allumer",
       "de",
       "du",
       "la",
+      "lampe",
+      "lampes",
       "le",
       "les",
+      "lumiere",
+      "lumieres",
     }
     text_tokens = {word for word in text.split() if word not in ignored_words}
     alias_tokens = {word for word in alias.split() if word not in ignored_words}
@@ -632,14 +637,21 @@ class ZigbeeComponent:
     catalog = self._device_catalog_for(display_name) if display_name else self._device_catalog()
 
     if not catalog:
+      matched_device_without_catalog = bool(display_name and self._device_exists(display_name))
       reason = "requested_device_not_found" if display_name or explicit_device else "no_devices_available"
+
+      if matched_device_without_catalog or (self.devices and not display_name and not explicit_device):
+        reason = "missing_operation"
+
       return await self._missing_command_response(
         language,
-        device_missing=True,
-        payload_missing=not display_name,
+        device_missing=not matched_device_without_catalog,
+        payload_missing=True,
         reason=reason,
-        requested_device=display_name or explicit_device or None,
-        suggested_devices=self._suggest_devices([display_name, explicit_device, *command_texts]),
+        requested_device=None if matched_device_without_catalog else display_name or explicit_device or None,
+        suggested_devices=(
+          [] if matched_device_without_catalog else self._suggest_devices([display_name, explicit_device, *command_texts])
+        ),
       )
 
     try:

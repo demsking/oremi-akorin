@@ -627,6 +627,54 @@ async def test_zigbee_uses_llm_command_selector_for_multilingual_operation_and_d
   ]
 
 
+def test_zigbee_fuzzy_matches_french_light_request_to_device_room_name():
+  component = ZigbeeComponent(FakeMQTTService())
+  configure_zigbee_devices(component, {"Bedroom lamp": light_device("Lampe chambre")})
+
+  assert component._extract_device(["Allume la lumière de la chambre"]) == (
+    "Lampe chambre",
+    "Bedroom lamp",
+    "fuzzy",
+    1.0,
+  )
+  assert component._device_catalog_for("Bedroom lamp") == [
+    {
+      "name": "Bedroom lamp",
+      "mqtt_topic": "Lampe chambre",
+      "model": None,
+      "manufacturer": None,
+      "operations": [
+        {
+          "property": "state",
+          "type": "binary",
+          "description": "Turn the light on or off.",
+          "value_on": "ON",
+          "value_off": "OFF",
+        },
+        {
+          "property": "brightness",
+          "type": "numeric",
+          "description": "Brightness level.",
+          "min": 0.0,
+          "max": 254.0,
+        },
+      ],
+      "states": [
+        {
+          "property": "state",
+          "type": "binary",
+          "description": "Turn the light on or off.",
+        },
+        {
+          "property": "brightness",
+          "type": "numeric",
+          "description": "Brightness level.",
+        },
+      ],
+    }
+  ]
+
+
 @pytest.mark.asyncio
 async def test_zigbee_uses_context_when_extracting_natural_language_command():
   mqtt_service = FakeMQTTService()
@@ -721,6 +769,38 @@ async def test_zigbee_reports_requested_device_not_found_with_available_devices(
     "required": ["device", "operation"],
   }
   assert message == generated_zigbee_response("zigbee_missing_command", "en", expected)
+  assert data == expected
+  assert mqtt_service.client.published == []
+
+
+@pytest.mark.asyncio
+async def test_zigbee_reports_loaded_devices_without_operations_as_missing_operation():
+  mqtt_service = FakeMQTTService()
+  mqtt_service.client = FakeZigbeeClient()
+
+  async def select_command(texts, catalog):
+    raise AssertionError("command selector should not run without a commandable device catalog")
+
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
+  configure_zigbee_devices(
+    component,
+    {
+      "Bedroom light": {
+        "friendly_name": "Lumière de la chambre",
+        "ieee_address": "0xa4c1385960a05c86",
+        "definition": {"exposes": []},
+      },
+    },
+  )
+
+  message, data = await component.process("Allume la lumière de la chambre", "fr", {}, [])
+
+  expected = {
+    "available_devices": ["Bedroom light"],
+    "reason": "missing_operation",
+    "required": ["operation"],
+  }
+  assert message == generated_zigbee_response("zigbee_missing_command", "fr", expected)
   assert data == expected
   assert mqtt_service.client.published == []
 
