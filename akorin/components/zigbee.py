@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-import asyncio
 import json
 import logging
 import re
 import unicodedata
+from collections import OrderedDict
 from collections.abc import Awaitable
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -127,6 +127,11 @@ class ZigbeeComponent:
     self.states: dict[str, dict[str, ZigbeeState]] = {}
     self.device_states: dict[str, dict[str, Any]] = {}
     self._state_topics: dict[str, str] = {}
+    self._device_index_key: tuple[Any, ...] = ()
+    self._device_aliases: list[tuple[str, str, str, str]] = []
+    self._device_catalog_key: tuple[Any, ...] = ()
+    self._device_catalog_cache: list[dict[str, Any]] = []
+    self._command_decision_cache: OrderedDict[str, Any] = OrderedDict()
 
   def start(self) -> None:
     self.mqtt.subscribe(DEVICES_TOPIC, self._update_devices)
@@ -172,7 +177,7 @@ class ZigbeeComponent:
         operations[friendly_name] = self._extract_operations(device)
         states[friendly_name] = self._extract_states(device)
 
-        logger.debug(
+        logger.info(
           f"Zigbee device found: name={friendly_name!r} ieee_address={device.get('ieee_address', 'unknown')!r} "
           f"operations={sorted(operations[friendly_name])} states={sorted(states[friendly_name])}"
         )
@@ -181,6 +186,7 @@ class ZigbeeComponent:
       self.operations = operations
       self.states = states
       self.device_states = {name: self.device_states.get(name, {}) for name in devices}
+      self._invalidate_catalog_indexes()
 
       self._sync_state_subscriptions(devices)
       logger.info(f"Loaded {len(devices)} Zigbee devices")
@@ -189,21 +195,20 @@ class ZigbeeComponent:
 
   def _resolve_device(self, name: str) -> tuple[str, str]:
     normalized = self._normalize(name)
+    self._ensure_device_index()
 
-    for device_name, device in self.devices.items():
-      friendly_name = device.get("friendly_name")
-      ieee_address = device.get("ieee_address")
-
-      if (
-        self._normalize(device_name) == normalized
-        or (isinstance(friendly_name, str) and self._normalize(friendly_name) == normalized)
-        or (isinstance(ieee_address, str) and ieee_address.casefold() == normalized)
-      ):
-        return str(friendly_name), device_name
+    for alias, bridge_name, device_name, _ in self._device_aliases:
+      if alias == normalized:
+        return bridge_name, device_name
 
     return name, name
 
   def _device_catalog(self) -> list[dict[str, Any]]:
+    key = self._catalog_key()
+
+    if self._device_catalog_key == key:
+      return list(self._device_catalog_cache)
+
     catalog = []
 
     for device_name, device in self.devices.items():
@@ -225,7 +230,10 @@ class ZigbeeComponent:
         }
       )
 
-    return catalog
+    self._device_catalog_key = key
+    self._device_catalog_cache = catalog
+
+    return list(catalog)
 
   def _device_catalog_for(self, device_name: str) -> list[dict[str, Any]]:
     normalized = self._normalize(device_name)
@@ -236,6 +244,59 @@ class ZigbeeComponent:
       if self._normalize(str(device.get("name") or "")) == normalized
       or self._normalize(str(device.get("mqtt_topic") or "")) == normalized
     ]
+
+  def _invalidate_catalog_indexes(self) -> None:
+    self._device_index_key = ()
+    self._device_aliases = []
+    self._device_catalog_key = ()
+    self._device_catalog_cache = []
+    self._command_decision_cache.clear()
+
+  def _index_key(self) -> tuple[Any, ...]:
+    return tuple(
+      sorted(
+        (
+          name,
+          str(device.get("friendly_name") or ""),
+          str(device.get("ieee_address") or ""),
+        )
+        for name, device in self.devices.items()
+      )
+    )
+
+  def _catalog_key(self) -> tuple[Any, ...]:
+    return tuple(
+      sorted(
+        (
+          name,
+          tuple(sorted(self.operations.get(name, {}))),
+          tuple(sorted(self.states.get(name, {}))),
+        )
+        for name in self.devices
+      )
+    )
+
+  def _ensure_device_index(self) -> None:
+    key = self._index_key()
+
+    if self._device_index_key == key:
+      return
+
+    aliases: list[tuple[str, str, str, str]] = []
+
+    for device_name, device in self.devices.items():
+      friendly_name = str(device.get("friendly_name") or "")
+      ieee_address = str(device.get("ieee_address") or "")
+      bridge_name = friendly_name or device_name
+
+      for alias_type, alias in (("name", device_name), ("mqtt_topic", friendly_name), ("ieee_address", ieee_address)):
+        normalized = self._normalize(alias) if alias_type != "ieee_address" else alias.casefold()
+
+        if normalized:
+          aliases.append((normalized, bridge_name, device_name, alias_type))
+
+    self._device_index_key = key
+    self._device_aliases = aliases
 
   def _extract_operations(self, device: dict[str, Any]) -> dict[str, ZigbeeOperation]:
     operations: dict[str, ZigbeeOperation] = {}
@@ -410,15 +471,14 @@ class ZigbeeComponent:
   def _extract_device(self, texts: list[str]) -> tuple[str, str, str, float] | None:
     normalized_texts = [self._normalize(text) for text in texts if text]
     exact_matches = []
+    self._ensure_device_index()
 
-    for device_name, device in self.devices.items():
-      friendly_name = str(device.get("friendly_name", ""))
+    for normalized_alias, bridge_name, device_name, alias_type in self._device_aliases:
+      if alias_type == "ieee_address":
+        continue
 
-      for alias_type, alias in (("name", device_name), ("mqtt_topic", friendly_name)):
-        normalized_alias = self._normalize(alias)
-
-        if normalized_alias and any(self._contains_phrase(text, normalized_alias) for text in normalized_texts):
-          exact_matches.append((len(normalized_alias), friendly_name, device_name, f"{alias_type} exact", 1.0))
+      if any(self._contains_phrase(text, normalized_alias) for text in normalized_texts):
+        exact_matches.append((len(normalized_alias), bridge_name, device_name, f"{alias_type} exact", 1.0))
 
     if exact_matches:
       _, bridge_name, device_name, reason, score = max(exact_matches)
@@ -458,15 +518,23 @@ class ZigbeeComponent:
 
   def _device_candidates(self, normalized_texts: list[str]) -> list[tuple[float, str, str]]:
     candidates = []
+    self._ensure_device_index()
 
-    for device_name, device in self.devices.items():
-      friendly_name = str(device.get("friendly_name", ""))
-      aliases = {self._normalize(device_name), self._normalize(friendly_name)}
+    by_device: dict[str, tuple[str, set[str]]] = {}
+
+    for alias, bridge_name, device_name, alias_type in self._device_aliases:
+      if alias_type == "ieee_address":
+        continue
+
+      _, aliases = by_device.setdefault(device_name, (bridge_name, set()))
+      aliases.add(alias)
+
+    for device_name, (bridge_name, aliases) in by_device.items():
       score = max(
         (self._device_similarity(text, alias) for text in normalized_texts for alias in aliases if alias),
         default=0.0,
       )
-      candidates.append((score, friendly_name, device_name))
+      candidates.append((score, bridge_name, device_name))
 
     return sorted(candidates, reverse=True)
 
@@ -503,11 +571,9 @@ class ZigbeeComponent:
 
   def _device_exists(self, device_name: str) -> bool:
     normalized = self._normalize(device_name)
+    self._ensure_device_index()
 
-    return any(
-      self._normalize(name) == normalized or self._normalize(str(device.get("friendly_name") or "")) == normalized
-      for name, device in self.devices.items()
-    )
+    return any(alias == normalized for alias, _, _, alias_type in self._device_aliases if alias_type != "ieee_address")
 
   def _available_device_names(self) -> list[str]:
     return sorted(self.devices)
@@ -657,11 +723,21 @@ class ZigbeeComponent:
         ),
       )
 
-    try:
-      decision = await self.command_selector([text for text in command_texts if text], catalog)
-    except Exception as exception:
-      logger.warning(f"Could not select Zigbee command with LLM: {exception}")
-      decision = {}
+    decision_texts = [text for text in command_texts if text]
+    command_cache_key = self._command_cache_key(decision_texts, catalog)
+    decision = self._command_decision_cache.get(command_cache_key)
+
+    if decision is not None:
+      self._command_decision_cache.move_to_end(command_cache_key)
+      logger.debug("Zigbee command decision cache hit")
+    else:
+      try:
+        decision = await self.command_selector(decision_texts, catalog)
+      except Exception as exception:
+        logger.warning(f"Could not select Zigbee command with LLM: {exception}")
+        decision = {}
+
+      self._store_command_decision(command_cache_key, decision)
 
     if isinstance(decision, BaseModel):
       decision = decision.model_dump()
@@ -700,6 +776,10 @@ class ZigbeeComponent:
 
       suggested_devices = self._suggest_devices(command_texts) if device_missing else []
 
+      if not validated_payload and match_reason == "fuzzy" and display_name:
+        suggested_devices = [display_name]
+        device_missing = True
+
       if suggested_devices:
         reason = "device_confirmation_required"
       elif device_missing and self._has_device_reference(command_texts):
@@ -720,7 +800,7 @@ class ZigbeeComponent:
         suggested_devices=suggested_devices,
       )
 
-    info = await asyncio.to_thread(self.client.publish, f"zigbee2mqtt/{bridge_device}/set", json.dumps(validated_payload))
+    info = self.client.publish(f"zigbee2mqtt/{bridge_device}/set", json.dumps(validated_payload))
 
     if info.rc != mqtt.MQTT_ERR_SUCCESS:
       raise ComponentUnavailable(Service.ZIGBEE, mqtt.error_string(info.rc))
@@ -744,6 +824,21 @@ class ZigbeeComponent:
     state_properties = decision.get("state_properties")
 
     return intent == "read" or (isinstance(state_properties, list) and bool(state_properties) and not decision.get("payload"))
+
+  def _command_cache_key(self, texts: list[str], catalog: list[dict[str, Any]]) -> str:
+    payload = {
+      "texts": texts,
+      "catalog": catalog,
+    }
+
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+
+  def _store_command_decision(self, key: str, decision: Any) -> None:
+    self._command_decision_cache[key] = decision
+    self._command_decision_cache.move_to_end(key)
+
+    while len(self._command_decision_cache) > 128:
+      self._command_decision_cache.popitem(last=False)
 
   async def _read_device_state(self, display_name: str, state_properties: Any, language: str) -> tuple[str, dict[str, Any]]:
     if not display_name:

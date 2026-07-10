@@ -118,6 +118,14 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       settings.cache_llm_ttl_seconds,
       settings.cache_component_ttl_seconds,
     )
+    logger.info(
+      "App settings [performance]: request_budget=%ss spellcheck_timeout=%ss route_timeout=%ss component_stale=%ss circuit_breaker=%s",
+      settings.request_budget_seconds,
+      settings.spellcheck_timeout_seconds,
+      settings.route_timeout_seconds,
+      settings.cache_component_stale_seconds,
+      settings.component_circuit_breaker_enabled,
+    )
 
     client = http_client or httpx.AsyncClient(timeout=settings.request_timeout)
     smart_cache = SmartCache(enabled=settings.cache_enabled, max_entries=settings.cache_max_entries)
@@ -147,6 +155,10 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     for component in components.values():
       component.cache = smart_cache
       component.cache_ttl_seconds = settings.cache_component_ttl_seconds
+      component.cache_stale_seconds = settings.cache_component_stale_seconds
+      component.circuit_breaker_enabled = settings.component_circuit_breaker_enabled
+      component.circuit_breaker_failures = settings.component_circuit_breaker_failures
+      component.circuit_breaker_cooldown_seconds = settings.component_circuit_breaker_cooldown_seconds
 
     component_names = [service.value for service in components]
     logger.info(

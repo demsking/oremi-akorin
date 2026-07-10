@@ -287,6 +287,32 @@ volatile context such as `datetime`.
 - `OREMI_AKORIN_CACHE_COMPONENT_TTL_SECONDS`: Optional. Defaults to
   `30.0`. Time-to-live for idempotent component GET calls. Valid range: `0.0`
   to `600.0`.
+- `OREMI_AKORIN_CACHE_COMPONENT_STALE_SECONDS`: Optional. Defaults to `120.0`.
+  Additional stale window for idempotent component GET calls. During this
+  window Akọrin can return the previous response immediately and refresh the
+  value in the background. Valid range: `0.0` to `3600.0`.
+
+### Performance Settings
+
+- `OREMI_AKORIN_REQUEST_BUDGET_SECONDS`: Optional. Defaults to `20.0`. Soft
+  end-to-end latency budget for processing one user request.
+- `OREMI_AKORIN_SPELLCHECK_TIMEOUT_SECONDS`: Optional. Defaults to `4.0`.
+  Maximum time spent normalizing one request before continuing with the
+  original text.
+- `OREMI_AKORIN_ROUTE_TIMEOUT_SECONDS`: Optional. Defaults to `4.0`. Maximum
+  time spent on LLM classification before using heuristic routing.
+- `OREMI_AKORIN_SKIP_SPELLCHECK_MAX_CHARS`: Optional. Defaults to `24`. Skips
+  LLM spellcheck for short one-token clean commands up to this length. Set to
+  `0` to disable.
+- `OREMI_AKORIN_COMPONENT_CIRCUIT_BREAKER_ENABLED`: Optional. Defaults to
+  `true`. Enables fast failures for external components after repeated request
+  failures.
+- `OREMI_AKORIN_COMPONENT_CIRCUIT_BREAKER_FAILURES`: Optional. Defaults to `3`.
+  Consecutive component request failures needed before opening the circuit
+  breaker.
+- `OREMI_AKORIN_COMPONENT_CIRCUIT_BREAKER_COOLDOWN_SECONDS`: Optional. Defaults
+  to `30.0`. Time an opened component circuit breaker stays open before a
+  retry is allowed.
 
 ### Oremi Service Settings
 

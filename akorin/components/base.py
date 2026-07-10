@@ -14,6 +14,7 @@
 # ==============================================================================
 import asyncio
 import logging
+from time import monotonic
 from time import perf_counter
 from typing import Any
 from typing import ClassVar
@@ -71,6 +72,10 @@ class ComponentClient:
     cache: SmartCache | None = None,
     *,
     cache_ttl_seconds: float = 0.0,
+    cache_stale_seconds: float = 0.0,
+    circuit_breaker_enabled: bool = False,
+    circuit_breaker_failures: int = 3,
+    circuit_breaker_cooldown_seconds: float = 30.0,
   ):
     self.name = name
     self.base_url = str(httpx.URL(url).copy_with(path="/", query=None, fragment=None))
@@ -78,6 +83,12 @@ class ComponentClient:
     self.client = client
     self.cache = cache
     self.cache_ttl_seconds = cache_ttl_seconds
+    self.cache_stale_seconds = cache_stale_seconds
+    self.circuit_breaker_enabled = circuit_breaker_enabled
+    self.circuit_breaker_failures = circuit_breaker_failures
+    self.circuit_breaker_cooldown_seconds = circuit_breaker_cooldown_seconds
+    self._failure_count = 0
+    self._circuit_open_until = 0.0
     self.server_url = self._url(self.server_path)
 
   def _url(self, path: str) -> str:
@@ -105,6 +116,8 @@ class ComponentClient:
     )
 
     async def run_request() -> Any:
+      self._raise_if_circuit_open()
+
       try:
         response = await request_with_retry(
           lambda: self.client.request(method, url, **kwargs),
@@ -126,8 +139,13 @@ class ComponentClient:
 
           raise ComponentUnavailable(self.name, f"HTTP {response.status_code}: {detail}")
       except (httpx.HTTPError, ValueError) as exception:
+        self._record_failure()
         raise ComponentUnavailable(self.name, str(exception)) from exception
+      except ComponentUnavailable:
+        self._record_failure()
+        raise
 
+      self._record_success()
       return data
 
     if self.cache is not None and method.upper() == "GET" and self.cache_ttl_seconds > 0 and not has_volatile_context(kwargs):
@@ -142,9 +160,42 @@ class ComponentClient:
         },
       )
 
-      return await self.cache.get_or_set(cache_key, self.cache_ttl_seconds, run_request)
+      return await self.cache.get_or_set_stale(
+        cache_key,
+        self.cache_ttl_seconds,
+        self.cache_stale_seconds,
+        run_request,
+      )
 
     return await run_request()
+
+  def _raise_if_circuit_open(self) -> None:
+    if not self.circuit_breaker_enabled:
+      return
+
+    remaining = self._circuit_open_until - monotonic()
+
+    if remaining > 0:
+      raise ComponentUnavailable(self.name, f"circuit breaker open for {remaining:.1f}s")
+
+  def _record_success(self) -> None:
+    self._failure_count = 0
+    self._circuit_open_until = 0.0
+
+  def _record_failure(self) -> None:
+    if not self.circuit_breaker_enabled:
+      return
+
+    self._failure_count += 1
+
+    if self._failure_count >= self.circuit_breaker_failures:
+      self._circuit_open_until = monotonic() + self.circuit_breaker_cooldown_seconds
+      logger.warning(
+        "Component circuit breaker opened: component=%s failures=%s cooldown_seconds=%s",
+        self.name.value,
+        self._failure_count,
+        self.circuit_breaker_cooldown_seconds,
+      )
 
   def parse_response(self, data: Any) -> tuple[str, Any]:
     if isinstance(data, dict):

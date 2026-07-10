@@ -74,9 +74,9 @@ def test_process_openapi_documentation_describes_contract():
   request_examples = operation["requestBody"]["content"]["application/json"]["examples"]
 
   assert {
-    "weather",
-    "reminder",
-    "zigbee",
+    "Weather forecast (EN)",
+    "Set a reminder (EN)",
+    "Zigbee device command",
   } <= set(request_examples)
   assert all({"summary", "description", "value"} <= set(example) for example in request_examples.values())
   assert set(operation["responses"]) == {"200", "422", "500"}

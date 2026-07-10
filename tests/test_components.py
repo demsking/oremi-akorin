@@ -129,7 +129,7 @@ async def test_isinmi_uses_natural_language_request_contract():
   def handler(request: httpx.Request) -> httpx.Response:
     nonlocal captured
     captured = request
-    return httpx.Response(201, json={"message": "Rappel créé.", "action": "create"})
+    return httpx.Response(201, json={"response_message": "Rappel créé.", "data": {"action": "create"}})
 
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
     component = IsinmiClient(Service.ISINMI, "http://isinmi.test", client)
@@ -142,15 +142,14 @@ async def test_isinmi_uses_natural_language_request_contract():
 
   assert captured is not None
   assert captured.method == "POST"
-  assert captured.url.path == "/api/agent/message"
-  assert captured.url.params["language"] == "fr"
+  assert captured.url.path == "/api/agent/chat"
   assert json.loads(captured.content) == {
-    "text": 'Rappelle-moi la réunion demain\n\nContext: {"timezone":"Europe/Paris"}',
-    "timezone": "Africa/Douala",
-    "tags": ["user:user-id", "device:device-id"],
+    "message": "Rappelle-moi la réunion demain",
+    "context": {"timezone": "Europe/Paris"},
+    "tags": ["user-id", "device-id"],
   }
   assert message == "Rappel créé."
-  assert data["action"] == "create"
+  assert data == {"action": "create"}
 
 
 @pytest.mark.asyncio
@@ -205,7 +204,7 @@ async def test_weather_uses_climate_query_contract():
   assert captured.method == "GET"
   assert captured.url.path == "/api/agent/climate"
   assert dict(captured.url.params) == {
-    "q": 'Quel temps fait-il à Paris ?\n\nContext: {"temperature_unit":"fahrenheit","timezone":"Europe/Paris"}',
+    "q": 'Quel temps fait-il à Paris ?\n\nContext: {"temperature_unit":"fahrenheit","timezone":"Africa/Douala"}',
     "timezone": "Africa/Douala",
     "temperature-unit": "fahrenheit",
   }
@@ -296,7 +295,7 @@ async def test_weather_uses_alert_query_contract():
     "service": "air-quality",
     "lat": "48.85",
     "lon": "2.35",
-    "timezone": "Africa/Douala",
+    "timezone": "Europe/Paris",
     "language": "en",
     "temperature-unit": "celsius",
   }
@@ -528,6 +527,31 @@ async def test_zigbee_extracts_device_and_state_from_natural_language():
     },
   ]
   assert len(calls[0][1]) == 1
+
+
+@pytest.mark.asyncio
+async def test_zigbee_reuses_cached_command_decision_for_same_catalog():
+  mqtt_service = FakeMQTTService()
+  mqtt_service.client = FakeZigbeeClient()
+  calls = 0
+
+  async def select_command(texts, catalog):
+    nonlocal calls
+    calls += 1
+
+    return {"device": "Lumière de la chambre", "payload": {"state": "ON"}, "confidence": 0.91}
+
+  component = ZigbeeComponent(mqtt_service, command_selector=select_command, response_generator=zigbee_response)
+  configure_zigbee_devices(component, {"Lumière de la chambre": light_device("Lumière de la chambre")})
+
+  await component.process("allume la lumière de la chambre", "fr", {}, [])
+  await component.process("allume la lumière de la chambre", "fr", {}, [])
+
+  assert calls == 1
+  assert mqtt_service.client.published == [
+    ("zigbee2mqtt/Lumière de la chambre/set", '{"state": "ON"}'),
+    ("zigbee2mqtt/Lumière de la chambre/set", '{"state": "ON"}'),
+  ]
 
 
 @pytest.mark.asyncio

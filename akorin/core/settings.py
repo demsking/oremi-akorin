@@ -193,6 +193,60 @@ class Settings(BaseSettings):
     description="TTL in seconds for cacheable idempotent component HTTP calls.",
   )
 
+  cache_component_stale_seconds: float = Field(
+    default=120.0,
+    ge=0.0,
+    le=3600.0,
+    description="Additional stale window in seconds for idempotent component HTTP calls while refreshing in the background.",
+  )
+
+  request_budget_seconds: float = Field(
+    default=20.0,
+    ge=1.0,
+    le=300.0,
+    description="Soft end-to-end latency budget in seconds for processing one user request.",
+  )
+
+  spellcheck_timeout_seconds: float = Field(
+    default=4.0,
+    ge=0.1,
+    le=60.0,
+    description="Maximum time in seconds to spend normalizing one user request before continuing with the original text.",
+  )
+
+  route_timeout_seconds: float = Field(
+    default=4.0,
+    ge=0.1,
+    le=60.0,
+    description="Maximum time in seconds to spend on LLM request classification before using heuristic routing.",
+  )
+
+  skip_spellcheck_max_chars: int = Field(
+    default=24,
+    ge=0,
+    le=500,
+    description="Skip LLM spellcheck for short clean command-like requests up to this length. Set to 0 to disable.",
+  )
+
+  component_circuit_breaker_enabled: bool = Field(
+    default=True,
+    description="Temporarily fail fast for external components after repeated request failures.",
+  )
+
+  component_circuit_breaker_failures: int = Field(
+    default=3,
+    ge=1,
+    le=100,
+    description="Consecutive component request failures needed before opening the circuit breaker.",
+  )
+
+  component_circuit_breaker_cooldown_seconds: float = Field(
+    default=30.0,
+    ge=1.0,
+    le=3600.0,
+    description="Time in seconds an opened component circuit breaker stays open before allowing a retry.",
+  )
+
   log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO", description="Logging level.")
   log_file: str | None = Field(default=None, description="Path to rotating log file.")
 

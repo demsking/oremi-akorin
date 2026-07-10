@@ -12,8 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import asyncio
 import json
 import logging
+import re
 from time import perf_counter
 from typing import Any
 from uuid import uuid4
@@ -32,6 +34,7 @@ from ..llm.agents.chat_tools import ChatToolsAgent
 from ..llm.agents.command import CommandAgent
 from ..llm.agents.response import ResponseAgent
 from ..llm.agents.spellcheck import SpellCheckAgent
+from ..utils.cache import has_volatile_context
 from ..utils.cache import SmartCache
 from ..utils.language import detect_language
 from .device_commands import select_device_commands
@@ -41,6 +44,7 @@ from .tools import ToolRegistry
 
 
 logger = logging.getLogger(__name__)
+SINGLE_TOKEN_COMMAND_RE = re.compile(r"^[\w%'-]+$", re.ASCII)
 
 KEYWORDS: dict[Service, tuple[str, ...]] = {
   Service.ISINMI: ("alarm", "alarme", "agenda", "remind", "rappel", "schedule", "timer"),
@@ -125,8 +129,10 @@ class Orchestrator:
     tools: ToolRegistry | None = None,
     cache: SmartCache | None = None,
   ):
+    self.settings = settings
     self.handlers = handlers
     self.tools = tools or ToolRegistry()
+    self.cache = cache
     self.chat_agent = ChatAgent(settings, client, cache)
     self.chat_tools_agent = ChatToolsAgent(settings, client, cache)
     self.command_agent = CommandAgent(settings, client, cache)
@@ -140,6 +146,42 @@ class Orchestrator:
 
   async def _chat_with_tools(self, message: str, language: str, context: dict[str, Any]) -> Any:
     return await self.chat_tools_agent.chat(message, language, context, self.tools)
+
+  async def _timed(self, timeout_seconds: float, operation) -> Any:
+    return await asyncio.wait_for(operation, timeout=timeout_seconds)
+
+  def _timeout_for(self, started: float, step_timeout: float) -> float:
+    elapsed = perf_counter() - started
+    remaining = self.settings.request_budget_seconds - elapsed
+
+    return max(0.1, min(step_timeout, remaining))
+
+  def _should_skip_spellcheck(self, message: str, routing_match: Any) -> bool:
+    if self.settings.skip_spellcheck_max_chars <= 0:
+      return False
+
+    text = message.strip()
+
+    return (
+      routing_match is not None
+      and len(text) <= self.settings.skip_spellcheck_max_chars
+      and bool(SINGLE_TOKEN_COMMAND_RE.fullmatch(text))
+    )
+
+  def _context_for_service(self, service: Service, context: dict[str, Any]) -> dict[str, Any]:
+    if self.cache is None or has_volatile_context(context):
+      return context_for_service(service, context)
+
+    cache_key = self.cache.make_key("context", {"service": service.value, "context": context})
+    cached = self.cache.get(cache_key)
+
+    if isinstance(cached, dict):
+      return cached
+
+    selected = context_for_service(service, context)
+    self.cache.set(cache_key, selected, self.settings.cache_llm_ttl_seconds)
+
+    return selected
 
   async def process(self, request: ProcessRequest) -> ProcessResponse:
     request_id = uuid4().hex[:8]
@@ -177,19 +219,25 @@ class Orchestrator:
 
     normalization_started = perf_counter()
 
-    try:
-      processing_message = await self.spellcheck_agent.check(request.message, language.value)
+    if self._should_skip_spellcheck(request.message, original_routing_match):
+      logger.debug(f"[{request_id}] Spellcheck skipped: reason=short_clean_command")
+    else:
+      try:
+        processing_message = await self._timed(
+          self._timeout_for(processing_started, self.settings.spellcheck_timeout_seconds),
+          self.spellcheck_agent.check(request.message, language.value),
+        )
 
-      logger.debug(
-        f"[{request_id}] Spellcheck completed: language={language.value} input_chars={len(request.message)} "
-        f"output_chars={len(processing_message)} duration_ms={(perf_counter() - normalization_started) * 1000:.1f} "
-        f"source_text={request.message!r} result_text={processing_message!r}"
-      )
-    except (httpx.HTTPError, KeyError, TypeError, ValueError) as exception:
-      logger.warning(f"[{request_id}] Input normalization failed; processing original request: {exception}")
+        logger.debug(
+          f"[{request_id}] Spellcheck completed: language={language.value} input_chars={len(request.message)} "
+          f"output_chars={len(processing_message)} duration_ms={(perf_counter() - normalization_started) * 1000:.1f} "
+          f"source_text={request.message!r} result_text={processing_message!r}"
+        )
+      except (asyncio.TimeoutError, httpx.HTTPError, KeyError, TypeError, ValueError) as exception:
+        logger.warning(f"[{request_id}] Input normalization failed; processing original request: {exception}")
 
-      processing_message = request.message
-      processing_language = language
+        processing_message = request.message
+        processing_language = language
 
     routing_started = perf_counter()
     routing_match = original_routing_match or rule_route(processing_message, request.context)
@@ -204,8 +252,11 @@ class Orchestrator:
       routing_reason = "LLM classification"
 
       try:
-        service, confidence = await self._route(processing_message, language.value)
-      except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exception:
+        service, confidence = await self._timed(
+          self._timeout_for(processing_started, self.settings.route_timeout_seconds),
+          self._route(processing_message, language.value),
+        )
+      except (asyncio.TimeoutError, httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exception:
         logger.warning(f"[{request_id}] Agent routing failed, using keyword router: {exception}")
         service, confidence = heuristic_route(processing_message)
         routing_source = "heuristic"
@@ -222,7 +273,7 @@ class Orchestrator:
         logger.debug(f"[{request_id}] Dispatching to agent chat with {len(self.tools.definitions)} tools")
         dispatch_started = perf_counter()
 
-        chat_context = context_for_service(Service.CHAT, request.context)
+        chat_context = self._context_for_service(Service.CHAT, request.context)
         chat_result = await self._chat_with_tools(processing_message, processing_language.value, chat_context)
         message = chat_result.message
         service = Service.TOOL if chat_result.tools else Service.CHAT
@@ -245,7 +296,7 @@ class Orchestrator:
 
         logger.debug(f"[{request_id}] Dispatching request: service={service.value} handler={type(handler).__name__}")
         dispatch_started = perf_counter()
-        handler_context = context_for_service(service, request.context)
+        handler_context = self._context_for_service(service, request.context)
 
         if service == Service.ZIGBEE:
           handler_context = {**handler_context, ORIGINAL_TEXT_CONTEXT_KEY: request.message}
@@ -293,7 +344,7 @@ class Orchestrator:
       fallback_tools = []
 
       try:
-        chat_context = context_for_service(Service.CHAT, request.context)
+        chat_context = self._context_for_service(Service.CHAT, request.context)
         chat_result = await self._chat_with_tools(processing_message, processing_language.value, chat_context)
         message = chat_result.message
         fallback_tools = chat_result.tools
