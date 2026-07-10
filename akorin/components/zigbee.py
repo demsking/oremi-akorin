@@ -134,8 +134,10 @@ class ZigbeeComponent:
 
   def stop(self) -> None:
     self.mqtt.unsubscribe(DEVICES_TOPIC)
+
     for topic in list(self._state_topics):
       self.mqtt.unsubscribe(topic)
+
     self._state_topics = {}
     logger.info("Zigbee device discovery stopped")
 
@@ -170,7 +172,7 @@ class ZigbeeComponent:
         operations[friendly_name] = self._extract_operations(device)
         states[friendly_name] = self._extract_states(device)
 
-        logger.info(
+        logger.debug(
           f"Zigbee device found: name={friendly_name!r} ieee_address={device.get('ieee_address', 'unknown')!r} "
           f"operations={sorted(operations[friendly_name])} states={sorted(states[friendly_name])}"
         )
@@ -179,6 +181,7 @@ class ZigbeeComponent:
       self.operations = operations
       self.states = states
       self.device_states = {name: self.device_states.get(name, {}) for name in devices}
+
       self._sync_state_subscriptions(devices)
       logger.info(f"Loaded {len(devices)} Zigbee devices")
     except (json.JSONDecodeError, ValueError, TypeError) as exception:
