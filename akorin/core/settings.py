@@ -167,6 +167,32 @@ class Settings(BaseSettings):
     description="Maximum number of tokens to generate in LLM responses. Default: 500.",
   )
 
+  cache_enabled: bool = Field(
+    default=True,
+    description="Enable the bounded internal cache for repeated LLM and idempotent component calls.",
+  )
+
+  cache_max_entries: int = Field(
+    default=512,
+    ge=0,
+    le=10000,
+    description="Maximum number of internal smart-cache entries kept in memory. Set to 0 to disable caching.",
+  )
+
+  cache_llm_ttl_seconds: float = Field(
+    default=300.0,
+    ge=0.0,
+    le=3600.0,
+    description="TTL in seconds for cacheable internal LLM calls.",
+  )
+
+  cache_component_ttl_seconds: float = Field(
+    default=30.0,
+    ge=0.0,
+    le=600.0,
+    description="TTL in seconds for cacheable idempotent component HTTP calls.",
+  )
+
   log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(default="INFO", description="Logging level.")
   log_file: str | None = Field(default=None, description="Path to rotating log file.")
 

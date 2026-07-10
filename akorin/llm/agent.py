@@ -31,6 +31,7 @@ from pydantic_ai import Agent
 from pydantic_ai import ModelSettings
 
 from ..core.settings import Settings
+from ..utils.cache import SmartCache
 
 if TYPE_CHECKING:
   from ..services.tools import ToolRegistry
@@ -46,8 +47,9 @@ class ChatResult:
 
 
 class AgentClient(Generic[OutputModel], ABC):
-  def __init__(self, settings: Settings, client: httpx.AsyncClient):
+  def __init__(self, settings: Settings, client: httpx.AsyncClient, cache: SmartCache | None = None):
     self.settings = settings
+    self.cache = cache
     self.uses_native_ollama = settings.uses_ollama()
     self.ollama_model_name = settings.resolve_ollama_model_name() if self.uses_native_ollama else ""
 
@@ -78,6 +80,38 @@ class AgentClient(Generic[OutputModel], ABC):
 
   def _parse_output(self, output: OutputModel) -> OutputModel:
     return output
+
+  def _system_prompt_for_cache(self) -> str | None:
+    module = __import__(type(self).__module__, fromlist=["SYSTEM_PROMPT"])
+
+    return getattr(module, "SYSTEM_PROMPT", self.settings.llm_system_prompt)
+
+  def _cache_key(
+    self,
+    prompt: str,
+    *,
+    system_prompt: str | None,
+    output_type: type[Any] | None = None,
+    model_settings: ModelSettings | None = None,
+  ) -> str | None:
+    if self.cache is None:
+      return None
+
+    settings = model_settings or self.model_settings
+
+    return self.cache.make_key(
+      "llm",
+      {
+        "agent": type(self).__name__,
+        "model": self.settings.llm_model,
+        "temperature": settings.get("temperature"),
+        "max_tokens": settings.get("max_tokens"),
+        "seed": settings.get("seed"),
+        "system_prompt": system_prompt,
+        "output_type": getattr(output_type, "__name__", str(output_type)),
+        "prompt": prompt,
+      },
+    )
 
   def _ollama_options(self, model_settings: ModelSettings | None = None) -> dict[str, Any]:
     settings = model_settings or self.model_settings
@@ -111,15 +145,30 @@ class AgentClient(Generic[OutputModel], ABC):
 
     messages.append({"role": "user", "content": prompt})
 
-    response = await self.ollama_client.chat(
-      model=self.ollama_model_name,
-      messages=messages,
-      stream=False,
-      think=False,
-      format=response_format,  # pyright: ignore
-      options=self._ollama_options(model_settings),
+    cache_key = self._cache_key(
+      prompt,
+      system_prompt=system_prompt,
+      output_type=output_type,
+      model_settings=model_settings,
     )
-    content = response.message.content or ""
+
+    async def run_request() -> Any:
+      response = await self.ollama_client.chat(  # pyright: ignore
+        model=self.ollama_model_name,
+        messages=messages,
+        stream=False,
+        think=False,
+        format=response_format,  # pyright: ignore
+        options=self._ollama_options(model_settings),
+      )
+
+      return response.message.content or ""
+
+    content = (
+      await self.cache.get_or_set(cache_key, self.settings.cache_llm_ttl_seconds, run_request)
+      if self.cache is not None and cache_key is not None
+      else await run_request()
+    )
 
     if isinstance(output_type, type) and issubclass(output_type, BaseModel):
       return output_type.model_validate_json(content)
@@ -134,9 +183,24 @@ class AgentClient(Generic[OutputModel], ABC):
     if self.agent is None:
       raise RuntimeError("Pydantic AI agent is not configured")
 
-    result: Any = await self.agent.run(prompt)
+    cache_key = (
+      self._cache_key(prompt, system_prompt=self._system_prompt_for_cache(), output_type=None)
+      if self.cache is not None
+      else None
+    )
 
-    return self._parse_output(result.output)
+    async def run_request() -> Any:
+      result: Any = await self.agent.run(prompt)  # pyright: ignore
+
+      return result.output
+
+    output = (
+      await self.cache.get_or_set(cache_key, self.settings.cache_llm_ttl_seconds, run_request)
+      if self.cache is not None and cache_key is not None
+      else await run_request()
+    )
+
+    return self._parse_output(output)
 
   @staticmethod
   def _build_tool_function(

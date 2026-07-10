@@ -25,6 +25,8 @@ from pydantic import Field
 
 from ..core.constants import Service
 from ..core.exceptions import ComponentUnavailable
+from ..utils.cache import has_volatile_context
+from ..utils.cache import SmartCache
 from ..utils.http_retry import request_with_retry
 from ..utils.request_context import contextualized_text
 from ..utils.request_context import request_context
@@ -61,11 +63,21 @@ class ComponentClient:
   server_path = "/api/server"
   server_info_model: ClassVar[type[BaseModel]] = ComponentServiceInfo
 
-  def __init__(self, name: Service, url: str, client: httpx.AsyncClient):
+  def __init__(
+    self,
+    name: Service,
+    url: str,
+    client: httpx.AsyncClient,
+    cache: SmartCache | None = None,
+    *,
+    cache_ttl_seconds: float = 0.0,
+  ):
     self.name = name
     self.base_url = str(httpx.URL(url).copy_with(path="/", query=None, fragment=None))
     self.url = self._url(self.endpoint_path)
     self.client = client
+    self.cache = cache
+    self.cache_ttl_seconds = cache_ttl_seconds
     self.server_url = self._url(self.server_path)
 
   def _url(self, path: str) -> str:
@@ -92,30 +104,47 @@ class ComponentClient:
       f"body_keys={sorted(payload) if isinstance(payload, dict) else []}"
     )
 
-    try:
-      response = await request_with_retry(
-        lambda: self.client.request(method, url, **kwargs),
-        str(self.name),
+    async def run_request() -> Any:
+      try:
+        response = await request_with_retry(
+          lambda: self.client.request(method, url, **kwargs),
+          str(self.name),
+        )
+
+        logger.debug(
+          f"Component response received: component={self.name} status={response.status_code} "
+          f"duration_ms={(perf_counter() - started) * 1000:.1f}"
+        )
+
+        data = response.json()
+
+        if response.is_error:
+          if isinstance(data, dict) and data.get("message"):
+            return data
+
+          detail = data.get("detail") if isinstance(data, dict) else data
+
+          raise ComponentUnavailable(self.name, f"HTTP {response.status_code}: {detail}")
+      except (httpx.HTTPError, ValueError) as exception:
+        raise ComponentUnavailable(self.name, str(exception)) from exception
+
+      return data
+
+    if self.cache is not None and method.upper() == "GET" and self.cache_ttl_seconds > 0 and not has_volatile_context(kwargs):
+      cache_key = self.cache.make_key(
+        "component",
+        {
+          "component": self.name.value,
+          "method": method.upper(),
+          "url": url,
+          "params": kwargs.get("params"),
+          "json": kwargs.get("json"),
+        },
       )
 
-      logger.debug(
-        f"Component response received: component={self.name} status={response.status_code} "
-        f"duration_ms={(perf_counter() - started) * 1000:.1f}"
-      )
+      return await self.cache.get_or_set(cache_key, self.cache_ttl_seconds, run_request)
 
-      data = response.json()
-
-      if response.is_error:
-        if isinstance(data, dict) and data.get("message"):
-          return data
-
-        detail = data.get("detail") if isinstance(data, dict) else data
-
-        raise ComponentUnavailable(self.name, f"HTTP {response.status_code}: {detail}")
-    except (httpx.HTTPError, ValueError) as exception:
-      raise ComponentUnavailable(self.name, str(exception)) from exception
-
-    return data
+    return await run_request()
 
   def parse_response(self, data: Any) -> tuple[str, Any]:
     if isinstance(data, dict):

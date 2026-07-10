@@ -32,6 +32,7 @@ from ..llm.agents.chat_tools import ChatToolsAgent
 from ..llm.agents.command import CommandAgent
 from ..llm.agents.response import ResponseAgent
 from ..llm.agents.spellcheck import SpellCheckAgent
+from ..utils.cache import SmartCache
 from ..utils.language import detect_language
 from .device_commands import select_device_commands
 from .device_commands import select_direct_device_command
@@ -57,7 +58,10 @@ SERVICE_CONTEXT_KEYS: dict[Service, frozenset[str]] = {
   Service.CHAT: TEMPORAL_CONTEXT_KEYS | UNIT_CONTEXT_KEYS,
   Service.TOOL: TEMPORAL_CONTEXT_KEYS | UNIT_CONTEXT_KEYS,
   Service.ISINMI: TEMPORAL_CONTEXT_KEYS,
-  Service.WEATHER: TEMPORAL_CONTEXT_KEYS | WEATHER_UNIT_CONTEXT_KEYS | LOCATION_CONTEXT_KEYS | frozenset(("alert_service", "service")),
+  Service.WEATHER: TEMPORAL_CONTEXT_KEYS
+  | WEATHER_UNIT_CONTEXT_KEYS
+  | LOCATION_CONTEXT_KEYS
+  | frozenset(("alert_service", "service")),
   Service.REDIYO: frozenset(),
   Service.KANSA: frozenset(),
   Service.ZIGBEE: frozenset(("device", "state", "room", "area", "zone")),
@@ -119,14 +123,15 @@ class Orchestrator:
     client: httpx.AsyncClient,
     handlers: dict[Service, Any],
     tools: ToolRegistry | None = None,
+    cache: SmartCache | None = None,
   ):
     self.handlers = handlers
     self.tools = tools or ToolRegistry()
-    self.chat_agent = ChatAgent(settings, client)
-    self.chat_tools_agent = ChatToolsAgent(settings, client)
-    self.command_agent = CommandAgent(settings, client)
-    self.response_agent = ResponseAgent(settings, client)
-    self.spellcheck_agent = SpellCheckAgent(settings, client)
+    self.chat_agent = ChatAgent(settings, client, cache)
+    self.chat_tools_agent = ChatToolsAgent(settings, client, cache)
+    self.command_agent = CommandAgent(settings, client, cache)
+    self.response_agent = ResponseAgent(settings, client, cache)
+    self.spellcheck_agent = SpellCheckAgent(settings, client, cache)
 
   async def _route(self, message: str, language: str) -> tuple[Service, float]:
     decision = await self.command_agent.classify(message)

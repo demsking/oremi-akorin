@@ -37,6 +37,7 @@ from ..components.zigbee import ZigbeeComponent
 from ..llm.agents.response import ResponseAgent
 from ..llm.agents.zigbee_command import ZigbeeCommandAgent
 from ..services.orchestrator import Orchestrator
+from ..utils.cache import SmartCache
 from ..utils.logger import configure_logging
 from ..utils.url import safe_url
 from .constants import Service
@@ -110,8 +111,16 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       settings.mqtt_keepalive,
     )
     logger.info("App settings [logging]: level=%s destination=%s", settings.log_level, settings.log_file or "stderr")
+    logger.info(
+      "App settings [smart_cache]: enabled=%s max_entries=%s llm_ttl_seconds=%s component_ttl_seconds=%s",
+      settings.cache_enabled,
+      settings.cache_max_entries,
+      settings.cache_llm_ttl_seconds,
+      settings.cache_component_ttl_seconds,
+    )
 
     client = http_client or httpx.AsyncClient(timeout=settings.request_timeout)
+    smart_cache = SmartCache(enabled=settings.cache_enabled, max_entries=settings.cache_max_entries)
 
     if settings.uses_ollama():
       if settings.ollama_base_url is None:
@@ -119,8 +128,8 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
 
       await _pull_ollama_model(settings)
 
-    zigbee_command_agent = ZigbeeCommandAgent(settings, client)
-    response_agent = ResponseAgent(settings, client)
+    zigbee_command_agent = ZigbeeCommandAgent(settings, client, smart_cache)
+    response_agent = ResponseAgent(settings, client, smart_cache)
 
     configured_components = (
       (Service.ISINMI, settings.isinmi_url, IsinmiClient),
@@ -134,6 +143,10 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       for service, url, component_type in configured_components
       if url is not None
     }
+
+    for component in components.values():
+      component.cache = smart_cache
+      component.cache_ttl_seconds = settings.cache_component_ttl_seconds
 
     component_names = [service.value for service in components]
     logger.info(
@@ -153,7 +166,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       Service.ZIGBEE: zigbee,
     }
 
-    orchestrator = Orchestrator(settings, client, handlers)
+    orchestrator = Orchestrator(settings, client, handlers, cache=smart_cache)
 
     if components:
       logger.info(f"Checking {len(components)} configured external component(s)")
