@@ -70,16 +70,19 @@ async def test_router_generation_is_deterministic(monkeypatch):
 @pytest.mark.asyncio
 async def test_command_agent_classifies_all_payload_examples(monkeypatch):
   expected_services = {
+    "weather": Service.WEATHER,
     "Weather forecast (EN)": Service.WEATHER,
     "Météo (FR)": Service.WEATHER,
     "Pollen count (EN)": Service.WEATHER,
     "Alerte Pollen (FR)": Service.WEATHER,
+    "zigbee": Service.ZIGBEE,
     "Control Zigbee device (EN)": Service.ZIGBEE,
     "Contrôler un appareil Zigbee (FR)": Service.ZIGBEE,
     "Allumer la lumière de la chambre (FR)": Service.ZIGBEE,
     "Éteindre la lumière de la chambre (FR)": Service.ZIGBEE,
     "General Chat (EN)": Service.CHAT,
     "Discussion générale (FR)": Service.CHAT,
+    "reminder": Service.ISINMI,
     "Set a reminder (EN)": Service.ISINMI,
     "Créer un rappel (FR)": Service.ISINMI,
     "Schedule recurring event (EN)": Service.ISINMI,

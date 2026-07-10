@@ -49,6 +49,53 @@ KEYWORDS: dict[Service, tuple[str, ...]] = {
   Service.ZIGBEE: ("zigbee", "light", "lamp", "lampe", "switch", "thermostat", "turn on", "turn off", "allume", "éteins"),
 }
 
+TEMPORAL_CONTEXT_KEYS = frozenset(("timezone", "datetime", "date_format", "time_format", "first_day_of_week"))
+UNIT_CONTEXT_KEYS = frozenset(("temperature_unit", "measurement_system", "distance_unit", "preferred_currency"))
+WEATHER_UNIT_CONTEXT_KEYS = frozenset(("temperature_unit", "measurement_system", "distance_unit"))
+LOCATION_CONTEXT_KEYS = frozenset(("location", "address", "latitude", "longitude", "lat", "lon"))
+SERVICE_CONTEXT_KEYS: dict[Service, frozenset[str]] = {
+  Service.CHAT: TEMPORAL_CONTEXT_KEYS | UNIT_CONTEXT_KEYS,
+  Service.TOOL: TEMPORAL_CONTEXT_KEYS | UNIT_CONTEXT_KEYS,
+  Service.ISINMI: TEMPORAL_CONTEXT_KEYS,
+  Service.WEATHER: TEMPORAL_CONTEXT_KEYS | WEATHER_UNIT_CONTEXT_KEYS | LOCATION_CONTEXT_KEYS | frozenset(("alert_service", "service")),
+  Service.REDIYO: frozenset(),
+  Service.KANSA: frozenset(),
+  Service.ZIGBEE: frozenset(("device", "state", "room", "area", "zone")),
+}
+
+
+def context_for_service(service: Service, context: dict[str, Any]) -> dict[str, Any]:
+  """Select the context keys a downstream service can use."""
+  allowed_keys = SERVICE_CONTEXT_KEYS.get(service, frozenset())
+
+  if not allowed_keys or not context:
+    return {}
+
+  selected: dict[str, Any] = {}
+  preferences = context.get("preferences")
+
+  if isinstance(preferences, dict):
+    selected.update({key: value for key, value in preferences.items() if key in allowed_keys})
+
+  selected.update({key: value for key, value in context.items() if key in allowed_keys})
+
+  if service == Service.WEATHER:
+    selected = _normalize_weather_context(selected)
+
+  return selected
+
+
+def _normalize_weather_context(context: dict[str, Any]) -> dict[str, Any]:
+  selected = dict(context)
+
+  if selected.get("lat") is None and selected.get("latitude") is not None:
+    selected["lat"] = selected["latitude"]
+
+  if selected.get("lon") is None and selected.get("longitude") is not None:
+    selected["lon"] = selected["longitude"]
+
+  return selected
+
 
 def heuristic_route(text: str) -> tuple[Service, float]:
   match = rule_route(text)
@@ -170,7 +217,8 @@ class Orchestrator:
         logger.debug(f"[{request_id}] Dispatching to agent chat with {len(self.tools.definitions)} tools")
         dispatch_started = perf_counter()
 
-        chat_result = await self._chat_with_tools(processing_message, processing_language.value, request.context)
+        chat_context = context_for_service(Service.CHAT, request.context)
+        chat_result = await self._chat_with_tools(processing_message, processing_language.value, chat_context)
         message = chat_result.message
         service = Service.TOOL if chat_result.tools else Service.CHAT
         confidence = 1.0 if chat_result.tools else confidence
@@ -192,10 +240,10 @@ class Orchestrator:
 
         logger.debug(f"[{request_id}] Dispatching request: service={service.value} handler={type(handler).__name__}")
         dispatch_started = perf_counter()
-        handler_context = request.context
+        handler_context = context_for_service(service, request.context)
 
         if service == Service.ZIGBEE:
-          handler_context = {**request.context, ORIGINAL_TEXT_CONTEXT_KEY: request.message}
+          handler_context = {**handler_context, ORIGINAL_TEXT_CONTEXT_KEY: request.message}
 
         message, data = await handler.process(
           processing_message,
@@ -240,7 +288,8 @@ class Orchestrator:
       fallback_tools = []
 
       try:
-        chat_result = await self._chat_with_tools(processing_message, processing_language.value, request.context)
+        chat_context = context_for_service(Service.CHAT, request.context)
+        chat_result = await self._chat_with_tools(processing_message, processing_language.value, chat_context)
         message = chat_result.message
         fallback_tools = chat_result.tools
 

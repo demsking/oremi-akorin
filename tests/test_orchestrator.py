@@ -10,6 +10,7 @@ from akorin.core.exceptions import ComponentRequestError
 from akorin.core.settings import Settings
 from akorin.llm.agent import ChatResult
 from akorin.llm.agents.command import RouteDecision
+from akorin.services.orchestrator import context_for_service
 from akorin.services.orchestrator import Orchestrator
 from akorin.services.orchestrator import heuristic_route
 from akorin.services.router import rule_route
@@ -167,6 +168,65 @@ def test_rule_router_ignores_non_service_context_values():
   assert match is not None
   assert match.service == Service.WEATHER
   assert match.reason == "weather terminology"
+
+
+def test_context_for_service_selects_weather_preferences_from_device_context():
+  context = {
+    "preferences": {
+      "language": "fr",
+      "location": "Deido, Douala, Cameroun",
+      "timezone": "Africa/Douala",
+      "temperature_unit": "celsius",
+      "preferred_currency": "XAF",
+      "measurement_system": "metric",
+      "distance_unit": "kilometer",
+      "time_format": "24h",
+      "date_format": "DD/MM/YYYY",
+      "first_day_of_week": "monday",
+      "latitude": 4.0637626,
+      "longitude": 9.7151827,
+      "address": "3 Rue Théophile Gautier, Villiers-sur-Marne, France",
+      "datetime": "2026-07-10T07:36:49.673555+02:00",
+    },
+    "route_to": "weather",
+    "trace_id": "private",
+  }
+
+  assert context_for_service(Service.WEATHER, context) == {
+    "location": "Deido, Douala, Cameroun",
+    "timezone": "Africa/Douala",
+    "temperature_unit": "celsius",
+    "measurement_system": "metric",
+    "distance_unit": "kilometer",
+    "time_format": "24h",
+    "date_format": "DD/MM/YYYY",
+    "first_day_of_week": "monday",
+    "latitude": 4.0637626,
+    "longitude": 9.7151827,
+    "lat": 4.0637626,
+    "lon": 9.7151827,
+    "address": "3 Rue Théophile Gautier, Villiers-sur-Marne, France",
+    "datetime": "2026-07-10T07:36:49.673555+02:00",
+  }
+
+
+def test_context_for_service_keeps_only_component_relevant_context():
+  context = {
+    "preferences": {
+      "timezone": "Africa/Douala",
+      "temperature_unit": "celsius",
+      "preferred_currency": "XAF",
+      "location": "Villiers sur Marne",
+    },
+    "timezone": "Europe/London",
+    "device": "bedroom_lamp",
+    "state": "ON",
+    "route_to": "zigbee",
+  }
+
+  assert context_for_service(Service.ISINMI, context) == {"timezone": "Europe/London"}
+  assert context_for_service(Service.ZIGBEE, context) == {"device": "bedroom_lamp", "state": "ON"}
+  assert context_for_service(Service.REDIYO, context) == {}
 
 
 @pytest.mark.parametrize(

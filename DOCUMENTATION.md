@@ -358,6 +358,39 @@ using deterministic rules and the configured Pydantic AI model, then dispatches
 the original-language request directly. It does not translate French input to
 English before processing.
 
+Request context can include caller-provided service hints and Oremi Device
+preferences. Akọrin uses the full context only for routing, then forwards a
+service-specific subset to the selected processor. For example, weather receives
+location, timezone, coordinates, and temperature/unit preferences; Isinmi
+receives date and time preferences; Zigbee receives only device or state
+context. Unrelated device preferences such as currency or exact location are not
+sent to components that do not use them.
+
+Oremi Device preference context:
+
+```json
+{
+  "text": "Quel temps fait-il ici ?",
+  "context": {
+    "preferences": {
+      "language": "fr",
+      "location": "Deido, Douala, Cameroun",
+      "timezone": "Africa/Douala",
+      "temperature_unit": "celsius",
+      "preferred_currency": "XAF",
+      "measurement_system": "metric",
+      "distance_unit": "kilometer",
+      "time_format": "24h",
+      "date_format": "DD/MM/YYYY",
+      "first_day_of_week": "monday",
+      "latitude": 4.0637626,
+      "longitude": 9.7151827,
+      "datetime": "2026-07-10T07:36:49.673555+02:00"
+    }
+  }
+}
+```
+
 | Service value | Capability                                      | Availability                          |
 | ------------- | ----------------------------------------------- | ------------------------------------- |
 | `chat`        | General conversation                            | Configured Pydantic AI model          |

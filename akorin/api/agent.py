@@ -34,20 +34,52 @@ API_TAG_METADATA = {
 
 router = APIRouter(prefix="/agent", tags=[API_TAG_METADATA["name"]])
 
+OREMI_DEVICE_PREFERENCES_EXAMPLE = {
+  "language": "fr",
+  "location": "Deido, Douala, Cameroun",
+  "timezone": "Africa/Douala",
+  "temperature_unit": "celsius",
+  "preferred_currency": "XAF",
+  "measurement_system": "metric",
+  "distance_unit": "kilometer",
+  "time_format": "24h",
+  "date_format": "DD/MM/YYYY",
+  "first_day_of_week": "monday",
+  "latitude": 4.0637626,
+  "longitude": 9.7151827,
+  "address": "Deido, Douala I, Communauté urbaine de Douala, Wouri, Littoral, Cameroon",
+  "datetime": "2026-07-10T07:36:49.673555+02:00",
+}
+
+
 PAYLOAD_EXAMPLES: dict[str, Example] = {
   # --- WEATHER ---
   "Weather forecast (EN)": {
     "summary": "Weather forecast (EN)",
     "description": "Requesting weather details with localized imperial/metric preferences via context.",
     "value": ProcessRequest.model_validate(
-      {"message": "What's the weather like in Lagos?", "context": {"timezone": "Africa/Lagos", "temperature_unit": "celsius"}}
+      {
+        "message": "What's the weather like in Lagos?",
+        "context": {"preferences": {"timezone": "Africa/Lagos", "temperature_unit": "celsius"}},
+      }
     ),
   },
   "Météo (FR)": {
     "summary": "Prévisions météo (FR)",
     "description": "Demande d'informations météo pour une ville spécifique.",
     "value": ProcessRequest.model_validate(
-      {"message": "Quel temps fait-il à Paris ?", "context": {"timezone": "Europe/Paris", "temperature_unit": "celsius"}}
+      {"message": "Quel temps fait-il à Paris ?", "context": {"preferences": OREMI_DEVICE_PREFERENCES_EXAMPLE}}
+    ),
+  },
+  "Weather with Oremi Device context": {
+    "summary": "Weather with Oremi Device context",
+    "description": "Uses the device preferences envelope; Akọrin forwards only weather-relevant context to the weather service.",
+    "value": ProcessRequest.model_validate(
+      {
+        "message": "Quel temps fait-il ici ?",
+        "context": {"preferences": OREMI_DEVICE_PREFERENCES_EXAMPLE},
+        "tags": ["device_id:oremi-device"],
+      }
     ),
   },
   # --- POLLEN ---
@@ -57,7 +89,7 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
     "value": ProcessRequest.model_validate(
       {
         "message": "Are pollen levels high in Lyon today?",
-        "context": {"latitude": 51.5074, "longitude": -0.1278, "timezone": "Europe/Paris"},
+        "context": {"alert_service": "pollen", "lat": 45.7640, "lon": 4.8357, "timezone": "Europe/Paris"},
       }
     ),
   },
@@ -67,11 +99,22 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
     "value": ProcessRequest.model_validate(
       {
         "message": "Est-ce qu'il y a du pollen à Lyon en ce moment ?",
-        "context": {"latitude": 45.7640, "longitude": 4.8357, "timezone": "Europe/Paris"},
+        "context": {"alert_service": "pollen", "lat": 45.7640, "lon": 4.8357, "timezone": "Europe/Paris"},
       }
     ),
   },
   # --- ZIGBEE ---
+  "Zigbee device command": {
+    "summary": "Zigbee device command",
+    "description": "Routes smart-home commands without forwarding unrelated device preferences to Zigbee processing.",
+    "value": ProcessRequest.model_validate(
+      {
+        "message": "Allume la lumière de la chambre",
+        "context": {"preferences": OREMI_DEVICE_PREFERENCES_EXAMPLE},
+        "tags": ["room:bedroom", "device_id:oremi-device"],
+      }
+    ),
+  },
   "Control Zigbee device (EN)": {
     "summary": "Control a Zigbee device",
     "description": "Explicitly passing device parameters and the intent via natural language, with a localized device room tag.",
@@ -147,6 +190,17 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
         "message": "Rappelle-moi de sortir les poubelles ce soir à 20h",
         "context": {"timezone": "Europe/Paris"},
         "tags": ["room:kitchen"],
+      }
+    ),
+  },
+  "Créer un rappel avec un context élargie (FR)": {
+    "summary": "Reminder with Oremi Device context",
+    "description": "Uses device date and time preferences while keeping unrelated location and unit preferences out of Isinmi.",
+    "value": ProcessRequest.model_validate(
+      {
+        "message": "Rappelle-moi de sortir les poubelles ce soir à 20h",
+        "context": {"preferences": OREMI_DEVICE_PREFERENCES_EXAMPLE},
+        "tags": ["device_id:oremi-device"],
       }
     ),
   },
@@ -243,12 +297,52 @@ RESPONSE_EXAMPLES: dict[str, Example] = {
       }
     ),
   },
+  "tool": {
+    "summary": "Native tool response",
+    "value": ProcessResponse.model_validate(
+      {
+        "ok": True,
+        "input": "What time is it in Paris?",
+        "language": "en",
+        "service": "tool",
+        "message": "It is 07:36 in Paris.",
+        "data": {
+          "tools": [
+            {
+              "name": "get_current_datetime",
+              "datetime": "2026-07-10T07:36:49.673555+02:00",
+              "date": "2026-07-10",
+              "time": "07:36:49",
+              "timezone": "Africa/Douala",
+            }
+          ]
+        },
+        "confidence": 1.0,
+        "commands": [],
+      }
+    ),
+  },
+  "more_information_required": {
+    "summary": "More information required",
+    "value": ProcessResponse.model_validate(
+      {
+        "ok": False,
+        "input": "Are there weather alerts?",
+        "language": "en",
+        "service": "weather",
+        "message": "Please share a location so I can check alerts for that area.",
+        "data": {"error": {"type": "more_information_required"}},
+        "confidence": 0.95,
+        "commands": [],
+      }
+    ),
+  },
 }
 
 
 @router.post(
   path="/",
-  summary="Process Natural Language Intent",
+  summary="Process a natural-language request",
   response_model=ProcessResponse,
   status_code=status.HTTP_200_OK,
   responses={
@@ -282,6 +376,9 @@ async def process_user_input(
 
   - conversational answers and native date/time, calculator, or conversion tools;
   - configured scheduling, weather, radio, podcast, or Zigbee services.
+
+  HTTP 200 responses include the processing result. Inspect `ok` to distinguish
+  successful results from expected service or input failures.
   """
   context: AppContext = request.app.state.context
 

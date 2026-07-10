@@ -146,7 +146,7 @@ async def test_isinmi_uses_natural_language_request_contract():
   assert captured.url.params["language"] == "fr"
   assert json.loads(captured.content) == {
     "text": 'Rappelle-moi la réunion demain\n\nContext: {"timezone":"Europe/Paris"}',
-    "timezone": "Europe/Paris",
+    "timezone": "Africa/Douala",
     "tags": ["user:user-id", "device:device-id"],
   }
   assert message == "Rappel créé."
@@ -197,7 +197,7 @@ async def test_weather_uses_climate_query_contract():
     message, _ = await component.process(
       "Quel temps fait-il à Paris ?",
       "fr",
-      {"timezone": "Europe/Paris", "temperature_unit": "fahrenheit"},
+      {"timezone": "Africa/Douala", "temperature_unit": "fahrenheit"},
       [],
     )
 
@@ -206,7 +206,7 @@ async def test_weather_uses_climate_query_contract():
   assert captured.url.path == "/api/agent/climate"
   assert dict(captured.url.params) == {
     "q": 'Quel temps fait-il à Paris ?\n\nContext: {"temperature_unit":"fahrenheit","timezone":"Europe/Paris"}',
-    "timezone": "Europe/Paris",
+    "timezone": "Africa/Douala",
     "temperature-unit": "fahrenheit",
   }
   assert message == "Il fait beau."
@@ -296,7 +296,7 @@ async def test_weather_uses_alert_query_contract():
     "service": "air-quality",
     "lat": "48.85",
     "lon": "2.35",
-    "timezone": "Europe/Paris",
+    "timezone": "Africa/Douala",
     "language": "en",
     "temperature-unit": "celsius",
   }
@@ -354,8 +354,7 @@ async def test_zigbee_discovers_devices_with_native_names_and_operations(caplog)
   assert "zigbee2mqtt/Lampe du salon" in mqtt_service.handlers
   assert any(
     "Zigbee device found: name='Lampe du salon' ieee_address='0x123' "
-    "operations=['brightness', 'state'] states=['brightness', 'state']"
-    == record.getMessage()
+    "operations=['brightness', 'state'] states=['brightness', 'state']" == record.getMessage()
     for record in caplog.records
   )
 
@@ -576,9 +575,7 @@ async def test_zigbee_narrows_catalog_before_llm_when_device_is_named():
       "Radiateur": {
         "friendly_name": "Radiateur",
         "definition": {
-          "exposes": [
-            {"type": "numeric", "property": "current_heating_setpoint", "access": 7, "value_min": 5, "value_max": 30}
-          ]
+          "exposes": [{"type": "numeric", "property": "current_heating_setpoint", "access": 7, "value_min": 5, "value_max": 30}]
         },
       },
     },

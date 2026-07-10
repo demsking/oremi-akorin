@@ -61,17 +61,22 @@ class ProcessRequest(BaseModel):
       "Optional contextual information for the request. Used to maintain "
       "conversation state or provide additional processing context.\n\n"
       "Context carries structured data needed by a service, such as an IANA "
-      "timezone, coordinates, temperature unit, or device state."
+      "timezone, coordinates, temperature unit, or device state. Callers may "
+      "also send device preferences under `preferences`; Akọrin selects the "
+      "attributes relevant to the routed service before dispatching."
     ),
     examples=[
       {
         "timezone": "Africa/Lagos",
       },
       {
-        "timezone": "Europe/Paris",
-        "latitude": 48.8566,
-        "longitude": 2.3522,
-        "temperature_unit": "celsius",
+        "preferences": {
+          "timezone": "Africa/Douala",
+          "latitude": 48.8566,
+          "longitude": 2.3522,
+          "temperature_unit": "celsius",
+          "time_format": "24h",
+        },
       },
       {
         "device": {
