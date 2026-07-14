@@ -8,7 +8,7 @@ from akorin.core.models import ProcessRequest
 from akorin.core.exceptions import ComponentUnavailable
 from akorin.core.exceptions import ComponentRequestError
 from akorin.core.settings import Settings
-from akorin.llm.agent import ChatResult
+from akorin.llm.agents.chat_tools import ChatResult
 from akorin.llm.agents.command import RouteDecision
 from akorin.services.orchestrator import context_for_service
 from akorin.services.orchestrator import Orchestrator
@@ -163,7 +163,7 @@ def test_rule_router_routes_french_sunset_request_to_weather():
 
 
 def test_rule_router_accepts_explicit_service_context():
-  match = rule_route("tell me about Lagos", {"route_to": "weather"})
+  match = rule_route("tell me about Lagos", {"route_to": "ojo"})
 
   assert match is not None
   assert match.service == Service.OREMI_OJO
@@ -378,11 +378,9 @@ async def test_processing_emits_correlated_debug_information(caplog):
     and "source_text='Weather in London' result_text='Weather in London'" in message
     for message in messages
   )
-  assert any("Routing completed:" in message and "service=weather" in message for message in messages)
-  assert any("Dispatching request: service=weather handler=FakeComponent" in message for message in messages)
-  assert any(
-    "Processing completed: ok=True service=weather" in message and "response='Sunny'" in message for message in messages
-  )
+  assert any("Routing completed:" in message and "service=ojo" in message for message in messages)
+  assert any("Dispatching request: service=ojo handler=FakeComponent" in message for message in messages)
+  assert any("Processing completed: ok=True service=ojo" in message and "response='Sunny'" in message for message in messages)
   assert not any("private-user-id" in message for message in messages)
 
 

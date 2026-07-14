@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 import os
+from functools import cached_property
 from functools import lru_cache
 from typing import Literal
 
@@ -324,26 +325,28 @@ class Settings(BaseSettings):
       Service.OREMI_KANSA: self.kansa_url,
     }
 
-  @property
+  @cached_property
   def configured_services(self) -> list[str]:
     """Get list of configured service names."""
     return [name for name, url in self.service_urls.items() if url]
 
-  @property
+  @cached_property
   def has_services(self) -> bool:
     """Check if any service URLs are configured."""
     return len(self.configured_services) > 0
 
-  def uses_ollama(self) -> bool:
+  @cached_property
+  def should_use_native_ollama(self) -> bool:
     """Return whether the active agent model uses the Ollama backend."""
 
     return self.llm_model.startswith("ollama:")
 
-  def resolve_ollama_model_name(self) -> str:
+  @cached_property
+  def ollama_model_name(self) -> str:
     """Return the Ollama model name without provider prefix."""
     return self.llm_model.removeprefix("ollama:")  # pylint: disable=no-member
 
-  @property
+  @cached_property
   def ollama_base_url_string(self) -> str:
     """Return the Ollama base URL for Pydantic AI."""
     if self.ollama_base_url is None:

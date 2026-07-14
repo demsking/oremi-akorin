@@ -18,7 +18,6 @@ from contextlib import asynccontextmanager
 from time import perf_counter
 
 import httpx
-import ollama
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
@@ -39,6 +38,7 @@ from ..llm.agents.zigbee_command import ZigbeeCommandAgent
 from ..services.orchestrator import Orchestrator
 from ..utils.cache import SmartCache
 from ..utils.logger import configure_logging
+from ..utils.ollama_model import load_ollama_model
 from ..utils.url import safe_url
 from .constants import Service
 from .context import AppContext
@@ -50,17 +50,6 @@ from .settings import Settings
 
 
 logger = logging.getLogger(__name__)
-
-
-async def _pull_ollama_model(settings: Settings) -> None:
-  """Pull configured Ollama model if enabled."""
-  try:
-    client = ollama.AsyncClient(host=settings.ollama_base_url_string, timeout=settings.llm_request_timeout)
-
-    await client.pull(settings.resolve_ollama_model_name(), stream=False)
-    logger.info(f"Ollama model ready: {settings.resolve_ollama_model_name()}")
-  except Exception as exception:
-    logger.warning(f"Could not pull Ollama model {settings.resolve_ollama_model_name()}: {exception}")
 
 
 def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None) -> FastAPI:
@@ -131,11 +120,11 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     client = http_client or httpx.AsyncClient(timeout=settings.http_request_timeout)
     smart_cache = SmartCache(enabled=settings.llm_cache_enabled, max_entries=settings.llm_cache_max_entries)
 
-    if settings.uses_ollama():
+    if settings.should_use_native_ollama:
       if settings.ollama_base_url is None:
-        raise RuntimeError("OREMI_AKORIN_OLLAMA_BASE_URL must be explicitly configured when using an ollama: model")
-
-      await _pull_ollama_model(settings)
+        logger.warning("OREMI_AKORIN_OLLAMA_BASE_URL is not configured; LLM-backed endpoints will be unavailable")
+      else:
+        await load_ollama_model(settings)
 
     zigbee_command_agent = ZigbeeCommandAgent(settings, client, smart_cache)
     response_agent = ResponseAgent(settings, client, smart_cache)

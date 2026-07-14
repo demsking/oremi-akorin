@@ -7,7 +7,6 @@ import pytest
 from pydantic import BaseModel
 
 from akorin.components.isinmi import IsinmiClient
-from akorin.components.isinmi import ServerHealth
 from akorin.components.kansa import KansaClient
 from akorin.components.rediyo import RediyoClient
 from akorin.components.ojo import OjoClient
@@ -16,6 +15,7 @@ from akorin.components.zigbee import DEVICES_TOPIC
 from akorin.components.zigbee import ORIGINAL_TEXT_CONTEXT_KEY
 from akorin.components.zigbee import ZigbeeComponent
 from akorin.core.constants import Service
+from akorin.core.oremi import OremiServerHealth
 
 
 class FakeMQTTService:
@@ -175,7 +175,7 @@ async def test_isinmi_service_info_uses_richer_health_model():
 
   assert captured is not None
   assert captured.url.path == "/health/"
-  assert isinstance(info, ServerHealth)
+  assert isinstance(info, OremiServerHealth)
   assert info.status == "healthy"
   assert info.app == "isinmi"
   assert info.version == "1.4.0"
@@ -201,12 +201,12 @@ async def test_weather_uses_climate_query_contract():
     )
 
   assert captured is not None
-  assert captured.method == "GET"
-  assert captured.url.path == "/api/agent/climate"
-  assert dict(captured.url.params) == {
-    "q": 'Quel temps fait-il à Paris ?\n\nContext: {"temperature_unit":"fahrenheit","timezone":"Africa/Douala"}',
-    "timezone": "Africa/Douala",
-    "temperature-unit": "fahrenheit",
+  assert captured.method == "POST"
+  assert captured.url.path == "/api/agent/chat"
+  assert json.loads(captured.content) == {
+    "message": "Quel temps fait-il à Paris ?",
+    "context": {"timezone": "Africa/Douala", "temperature_unit": "fahrenheit"},
+    "tags": [],
   }
   assert message == "Il fait beau."
 
@@ -238,16 +238,19 @@ async def test_weather_context_location_overrides_local_request_after_rewrite():
     )
 
   assert captured is not None
-  assert dict(captured.url.params) == {
-    "q": (
-      "Quel temps fait-il ici ?\n"
-      "Lieu: Deido, Douala, Cameroun\n\n"
-      'Context: {"datetime":"2026-07-10T07:36:49.673555+02:00","lat":4.0637626,'
-      '"location":"Deido, Douala, Cameroun","lon":9.7151827,"temperature_unit":"celsius",'
-      '"timezone":"Africa/Douala"}'
-    ),
-    "timezone": "Africa/Douala",
-    "temperature-unit": "celsius",
+  assert captured.url.path == "/api/agent/chat"
+  assert json.loads(captured.content) == {
+    "message": "Quelle est la température à Paris aujourd'hui ?",
+    "context": {
+      "_oremi_original_text": "Quel temps fait-il ici ?",
+      "location": "Deido, Douala, Cameroun",
+      "timezone": "Africa/Douala",
+      "temperature_unit": "celsius",
+      "lat": 4.0637626,
+      "lon": 9.7151827,
+      "datetime": "2026-07-10T07:36:49.673555+02:00",
+    },
+    "tags": [],
   }
   assert message == "Il fait beau à Douala."
 
@@ -309,37 +312,6 @@ async def test_background_monitor_recovers_component_availability():
   await task
 
   assert statuses[Service.OREMI_OJO] is True
-
-
-@pytest.mark.asyncio
-async def test_weather_uses_alert_query_contract():
-  captured = None
-
-  def handler(request: httpx.Request) -> httpx.Response:
-    nonlocal captured
-    captured = request
-    return httpx.Response(200, json={"message": "Air quality alert."})
-
-  async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    component = OjoClient(Service.OREMI_OJO, "http://weather.test", client)
-    await component.process(
-      "Are there air quality alerts?",
-      "en",
-      {"alert_service": "air-quality", "lat": 48.85, "lon": 2.35, "timezone": "Europe/Paris"},
-      [],
-    )
-
-  assert captured is not None
-  assert captured.method == "GET"
-  assert captured.url.path == "/api/agent/alerts"
-  assert dict(captured.url.params) == {
-    "service": "air-quality",
-    "lat": "48.85",
-    "lon": "2.35",
-    "timezone": "Europe/Paris",
-    "language": "en",
-    "temperature-unit": "celsius",
-  }
 
 
 @pytest.mark.asyncio

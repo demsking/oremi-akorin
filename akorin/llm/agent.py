@@ -15,10 +15,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from abc import ABC
 from abc import abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 from typing import Generic
 from typing import TYPE_CHECKING
@@ -40,18 +40,15 @@ if TYPE_CHECKING:
 OutputModel = TypeVar("OutputModel")
 
 
-@dataclass(frozen=True, slots=True)
-class ChatResult:
-  message: str
-  tools: list[ToolResult]
+logger = logging.getLogger(__name__)
 
 
 class AgentClient(Generic[OutputModel], ABC):
   def __init__(self, settings: Settings, client: httpx.AsyncClient, cache: SmartCache | None = None):
     self.settings = settings
     self.cache = cache
-    self.uses_native_ollama = settings.uses_ollama()
-    self.ollama_model_name = settings.resolve_ollama_model_name() if self.uses_native_ollama else ""
+    self.uses_native_ollama = settings.should_use_native_ollama
+    self.ollama_model_name = settings.ollama_model_name if self.uses_native_ollama else ""
 
     self.ollama_client = (
       ollama.AsyncClient(host=settings.ollama_base_url_string, timeout=settings.llm_request_timeout)

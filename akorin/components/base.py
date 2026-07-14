@@ -110,7 +110,7 @@ class ComponentClient:
     return self._parse_process_response(data)
 
   def _parse_process_response(self, data: dict[str, Any]) -> tuple[str, Any]:
-    return data["message"], data["data"]
+    return data["message"], data.get("data", data)
 
   def request_context(self, context: dict[str, Any]) -> str | None:
     return request_context(context)

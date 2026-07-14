@@ -89,10 +89,15 @@ class SmartCache:
       self._record(misses=1)
       return None
 
-    if entry.expires_at <= self._clock():
+    now = self._clock()
+
+    if entry.expires_at <= now:
       logger.debug("Smart cache expired: key=%s", key)
       self._record(misses=1)
-      self._entries.pop(key, None)
+
+      if entry.stale_until <= now:
+        self._entries.pop(key, None)
+
       return None
 
     self._entries.move_to_end(key)
