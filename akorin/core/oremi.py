@@ -12,13 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-import sys
-import tomllib
+from typing import Any
 
-with open("pyproject.toml", "rb") as file:
-  value = tomllib.load(file)["project"][sys.argv[1]]
+from pydantic import BaseModel
 
-if isinstance(value, list):
-  value = ", ".join(value)
 
-print(value)
+class OremiServerHealth(BaseModel):
+  status: str
+  app: str
+  version: str
+  llm_model: str
+
+
+class OremiAgentRequest(BaseModel):
+  message: str
+  context: dict[str, Any]
+  tags: list[str]

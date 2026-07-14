@@ -14,42 +14,14 @@
 # ==============================================================================
 from typing import Any
 
-from pydantic import BaseModel
-
+from ..core.oremi import OremiServerHealth
 from .base import ComponentClient
-
-
-class IsinmiServerHealth(BaseModel):
-  status: str
-  app: str
-  version: str
-  llm_model: str
-
-
-ServerHealth = IsinmiServerHealth
-
-
-class AgentChatRequest(BaseModel):
-  message: str
-  context: dict[str, Any]
-  tags: list[str]
 
 
 class IsinmiClient(ComponentClient):
   endpoint_path = "/api/agent/chat"
   server_path = "/health/"
-  server_info_model = IsinmiServerHealth
+  server_info_model = OremiServerHealth
 
-  async def process(self, message: str, language: str, context: dict[str, Any], tags: list[str]) -> tuple[str, Any]:
-    payload = AgentChatRequest(
-      message=message,
-      context=context,
-      tags=tags,
-    )
-
-    data = await self.request_json(
-      method="POST",
-      json=payload.model_dump(),
-    )
-
+  def _parse_process_response(self, data: dict[str, Any]) -> tuple[str, Any]:
     return data["response_message"], data["data"]

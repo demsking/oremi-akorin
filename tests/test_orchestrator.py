@@ -122,8 +122,8 @@ class FakeIncompleteRequestComponent:
 
 
 def test_heuristic_routes_bilingual_intents():
-  assert heuristic_route("Météo à Paris")[0] == Service.WEATHER
-  assert heuristic_route("Play a podcast")[0] == Service.KANSA
+  assert heuristic_route("Météo à Paris")[0] == Service.OREMI_OJO
+  assert heuristic_route("Play a podcast")[0] == Service.OREMI_KANSA
   assert heuristic_route("Hello there")[0] == Service.CHAT
   assert heuristic_route("Recherche Wikipédia sur le Cameroun")[0] == Service.CHAT
 
@@ -150,15 +150,23 @@ def test_rule_router_distinguishes_light_names_and_weather_stations_from_radio()
   radio = rule_route("play KTLF The Light radio station")
   weather = rule_route("show the weather station forecast")
 
-  assert radio is not None and radio.service == Service.REDIYO
-  assert weather is not None and weather.service == Service.WEATHER
+  assert radio is not None and radio.service == Service.OREMI_REDIYO
+  assert weather is not None and weather.service == Service.OREMI_OJO
+
+
+def test_rule_router_routes_french_sunset_request_to_weather():
+  match = rule_route("à quelle heure va se coucher le soleil ce soir ?")
+
+  assert match is not None
+  assert match.service == Service.OREMI_OJO
+  assert match.reason == "weather terminology"
 
 
 def test_rule_router_accepts_explicit_service_context():
   match = rule_route("tell me about Lagos", {"route_to": "weather"})
 
   assert match is not None
-  assert match.service == Service.WEATHER
+  assert match.service == Service.OREMI_OJO
   assert match.reason == "explicit service context"
 
 
@@ -166,7 +174,7 @@ def test_rule_router_ignores_non_service_context_values():
   match = rule_route("Are there alerts?", {"service": "air-quality"})
 
   assert match is not None
-  assert match.service == Service.WEATHER
+  assert match.service == Service.OREMI_OJO
   assert match.reason == "weather terminology"
 
 
@@ -192,7 +200,7 @@ def test_context_for_service_selects_weather_preferences_from_device_context():
     "trace_id": "private",
   }
 
-  assert context_for_service(Service.WEATHER, context) == {
+  assert context_for_service(Service.OREMI_OJO, context) == {
     "location": "Deido, Douala, Cameroun",
     "timezone": "Africa/Douala",
     "temperature_unit": "celsius",
@@ -224,9 +232,9 @@ def test_context_for_service_keeps_only_component_relevant_context():
     "route_to": "zigbee",
   }
 
-  assert context_for_service(Service.ISINMI, context) == {"timezone": "Europe/London"}
+  assert context_for_service(Service.OREMI_ISINMI, context) == {"timezone": "Europe/London"}
   assert context_for_service(Service.ZIGBEE, context) == {"device": "bedroom_lamp", "state": "ON"}
-  assert context_for_service(Service.REDIYO, context) == {}
+  assert context_for_service(Service.OREMI_REDIYO, context) == {}
 
 
 @pytest.mark.parametrize(
@@ -246,9 +254,9 @@ def test_rule_router_keeps_general_explanations_in_chat(text):
 
 @pytest.mark.asyncio
 async def test_process_uses_router_fallback_and_component():
-  orchestrator = make_orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent()})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.OREMI_OJO: FakeComponent()})
   result = await orchestrator.process(ProcessRequest(text="Weather in London"))
-  assert result.service == Service.WEATHER
+  assert result.service == Service.OREMI_OJO
   assert result.message == "Sunny"
   assert result.data == {"temperature": 22}
 
@@ -259,7 +267,7 @@ async def test_rediyo_result_selects_speak_then_play_commands():
     "Here is France Culture.",
     {"station": {"name": "France Culture", "url": "https://radio.example/live.mp3"}},
   )
-  orchestrator = make_orchestrator(FakeOllama(), {Service.REDIYO: component})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.OREMI_REDIYO: component})
 
   result = await orchestrator.process(ProcessRequest(text="Play France Culture radio", language="en"))
 
@@ -285,7 +293,7 @@ async def test_isinmi_result_selects_speak_then_reminder_commands():
       },
     },
   )
-  orchestrator = make_orchestrator(FakeOllama(), {Service.ISINMI: component})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.OREMI_ISINMI: component})
 
   result = await orchestrator.process(
     ProcessRequest(
@@ -309,7 +317,7 @@ async def test_isinmi_result_selects_speak_then_reminder_commands():
 @pytest.mark.asyncio
 async def test_incomplete_media_result_falls_back_to_automatic_message_speech():
   component = FakeResultComponent("No playable station found.", {"station": {"name": "Unknown"}})
-  orchestrator = make_orchestrator(FakeOllama(), {Service.REDIYO: component})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.OREMI_REDIYO: component})
 
   result = await orchestrator.process(ProcessRequest(text="Play an unknown station", language="en"))
 
@@ -333,7 +341,7 @@ async def test_direct_device_controls_bypass_conversational_processing(text, lan
 
   result = await orchestrator.process(ProcessRequest(message=text, language=language))
 
-  assert result.service == Service.DEVICE
+  assert result.service == Service.OREMI_DEVICE
   assert result.commands[0].model_dump(mode="json", exclude_none=True) == command
 
 
@@ -349,7 +357,7 @@ async def test_invalid_direct_device_control_is_not_emitted():
 
 @pytest.mark.asyncio
 async def test_processing_emits_correlated_debug_information(caplog):
-  orchestrator = make_orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent()})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.OREMI_OJO: FakeComponent()})
 
   with caplog.at_level(logging.DEBUG, logger="akorin.services.orchestrator"):
     await orchestrator.process(
@@ -445,13 +453,13 @@ async def test_original_smart_home_request_routes_to_zigbee_when_spellcheck_mang
 async def test_general_french_explanation_uses_chat_even_if_classifier_would_choose_weather():
   class WeatherBiasedOllama(FakeOllama):
     async def route(self, text, language):
-      return Service.WEATHER, 0.95
+      return Service.OREMI_OJO, 0.95
 
     async def chat_with_tools(self, text, language, context, tools):
       assert language == "fr"
       return ChatResult(message="Le ciel paraît bleu à cause de la diffusion de la lumière.", tools=[])
 
-  orchestrator = make_orchestrator(WeatherBiasedOllama(), {Service.WEATHER: FakeComponent(unavailable=True)})
+  orchestrator = make_orchestrator(WeatherBiasedOllama(), {Service.OREMI_OJO: FakeComponent(unavailable=True)})
 
   result = await orchestrator.process(ProcessRequest(text="Pourquoi le ciel est bleu ? Explique-moi simplement."))
 
@@ -464,10 +472,10 @@ async def test_general_french_explanation_uses_chat_even_if_classifier_would_cho
 
 @pytest.mark.asyncio
 async def test_component_failure_returns_an_explanatory_response():
-  orchestrator = make_orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent(unavailable=True)})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.OREMI_OJO: FakeComponent(unavailable=True)})
   result = await orchestrator.process(ProcessRequest(text="Weather in London"))
   assert result.ok is False
-  assert result.service == Service.WEATHER
+  assert result.service == Service.OREMI_OJO
   assert result.message == generated_response("component_temporarily_unavailable", "en", {"service": "weather"})
   assert result.data == {"error": {"type": "service_temporarily_unavailable"}}
   assert "offline" not in result.model_dump_json()
@@ -475,7 +483,7 @@ async def test_component_failure_returns_an_explanatory_response():
 
 @pytest.mark.asyncio
 async def test_component_failure_message_uses_request_language():
-  orchestrator = make_orchestrator(FakeOllama(), {Service.WEATHER: FakeComponent(unavailable=True)})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.OREMI_OJO: FakeComponent(unavailable=True)})
   result = await orchestrator.process(ProcessRequest(text="Météo à Paris", language="fr"))
 
   assert result.message == generated_response("component_temporarily_unavailable", "fr", {"service": "weather"})
@@ -484,15 +492,15 @@ async def test_component_failure_message_uses_request_language():
 
 @pytest.mark.asyncio
 async def test_missing_component_input_returns_help_without_internal_details():
-  orchestrator = make_orchestrator(FakeOllama(), {Service.WEATHER: FakeIncompleteRequestComponent()})
+  orchestrator = make_orchestrator(FakeOllama(), {Service.OREMI_OJO: FakeIncompleteRequestComponent()})
   result = await orchestrator.process(ProcessRequest(text="Weather alert", language="en"))
 
   assert result.ok is False
-  assert result.service == Service.WEATHER
+  assert result.service == Service.OREMI_OJO
   assert result.message == generated_response(
     "component_needs_more_information",
     "en",
-    {"service": "weather", "request": "Weather alert"},
+    {"service": "ojo", "request": "Weather alert"},
   )
   assert result.data == {"error": {"type": "more_information_required"}}
   assert "context.lat" not in result.model_dump_json()

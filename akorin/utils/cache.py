@@ -92,7 +92,7 @@ class SmartCache:
     if entry.expires_at <= self._clock():
       logger.debug("Smart cache expired: key=%s", key)
       self._record(misses=1)
-
+      self._entries.pop(key, None)
       return None
 
     self._entries.move_to_end(key)
@@ -140,6 +140,9 @@ class SmartCache:
 
     if cached is not None:
       return cached
+
+    if key in self._entries:
+      return self._entries[key].value  # type: ignore[return-value]
 
     value = await self._singleflight(key, factory)
     self.set(key, value, ttl_seconds)
@@ -206,7 +209,7 @@ class SmartCache:
       self._record(singleflight_waits=1)
       return await task
 
-    task = asyncio.create_task(factory())
+    task = asyncio.create_task(factory())  # pyright: ignore
     self._inflight[key] = task
 
     try:
@@ -248,5 +251,10 @@ def has_volatile_context(value: Any) -> bool:
 
   if isinstance(value, list):
     return any(has_volatile_context(item) for item in value)
+
+  if isinstance(value, str):
+    lowered = value.casefold()
+
+    return any(f'"{key}":' in lowered or f"{key}=" in lowered for key in VOLATILE_CONTEXT_KEYS)
 
   return False

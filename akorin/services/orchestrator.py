@@ -47,10 +47,10 @@ logger = logging.getLogger(__name__)
 SINGLE_TOKEN_COMMAND_RE = re.compile(r"^[\w%'-]+$", re.ASCII)
 
 KEYWORDS: dict[Service, tuple[str, ...]] = {
-  Service.ISINMI: ("alarm", "alarme", "agenda", "remind", "rappel", "schedule", "timer"),
-  Service.WEATHER: ("air quality", "alert", "forecast", "météo", "pollen", "temperature", "warning", "weather"),
-  Service.REDIYO: ("radio", "station", "rediyo"),
-  Service.KANSA: ("kansa", "podcast", "episode", "épisode"),
+  Service.OREMI_ISINMI: ("alarm", "alarme", "agenda", "remind", "rappel", "schedule", "timer"),
+  Service.OREMI_OJO: ("air quality", "alert", "forecast", "météo", "pollen", "temperature", "warning", "weather"),
+  Service.OREMI_REDIYO: ("radio", "station", "rediyo"),
+  Service.OREMI_KANSA: ("kansa", "podcast", "episode", "épisode"),
   Service.ZIGBEE: ("zigbee", "light", "lamp", "lampe", "switch", "thermostat", "turn on", "turn off", "allume", "éteins"),
 }
 
@@ -61,13 +61,13 @@ LOCATION_CONTEXT_KEYS = frozenset(("location", "address", "latitude", "longitude
 SERVICE_CONTEXT_KEYS: dict[Service, frozenset[str]] = {
   Service.CHAT: TEMPORAL_CONTEXT_KEYS | UNIT_CONTEXT_KEYS,
   Service.TOOL: TEMPORAL_CONTEXT_KEYS | UNIT_CONTEXT_KEYS,
-  Service.ISINMI: TEMPORAL_CONTEXT_KEYS,
-  Service.WEATHER: TEMPORAL_CONTEXT_KEYS
+  Service.OREMI_ISINMI: TEMPORAL_CONTEXT_KEYS,
+  Service.OREMI_OJO: TEMPORAL_CONTEXT_KEYS
   | WEATHER_UNIT_CONTEXT_KEYS
   | LOCATION_CONTEXT_KEYS
   | frozenset(("alert_service", "service")),
-  Service.REDIYO: frozenset(),
-  Service.KANSA: frozenset(),
+  Service.OREMI_REDIYO: frozenset(),
+  Service.OREMI_KANSA: frozenset(),
   Service.ZIGBEE: frozenset(("device", "state", "room", "area", "zone")),
 }
 
@@ -87,7 +87,7 @@ def context_for_service(service: Service, context: dict[str, Any]) -> dict[str, 
 
   selected.update({key: value for key, value in context.items() if key in allowed_keys})
 
-  if service == Service.WEATHER:
+  if service == Service.OREMI_OJO:
     selected = _normalize_weather_context(selected)
 
   return selected
@@ -179,7 +179,7 @@ class Orchestrator:
       return cached
 
     selected = context_for_service(service, context)
-    self.cache.set(cache_key, selected, self.settings.cache_llm_ttl_seconds)
+    self.cache.set(cache_key, selected, self.settings.llm_cache_ttl_seconds)
 
     return selected
 
@@ -199,7 +199,7 @@ class Orchestrator:
       return ProcessResponse(
         input=request.message,
         language=language,
-        service=Service.DEVICE,
+        service=Service.OREMI_DEVICE,
         message=message,
         confidence=1,
         commands=[command],
@@ -298,7 +298,7 @@ class Orchestrator:
         dispatch_started = perf_counter()
         handler_context = self._context_for_service(service, request.context)
 
-        if service == Service.ZIGBEE:
+        if service in {Service.OREMI_OJO, Service.ZIGBEE}:
           handler_context = {**handler_context, ORIGINAL_TEXT_CONTEXT_KEY: request.message}
 
         message, data = await handler.process(

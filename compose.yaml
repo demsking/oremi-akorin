@@ -40,15 +40,15 @@ services:
       timeout: 10s
       retries: 3
 
-  weather:
-    image: demsking/oremi-weather-agent
+  ojo:
+    image: demsking/oremi-ojo
     restart: always
     depends_on:
       - ollama
     ports:
       - 31777:1777
     environment:
-      OLLAMA_BASEURL: http://ollama:11434
+      OREMI_OJO_OLLAMA_BASE_URL: http://ollama:11434
 
   rediyo:
     image: demsking/oremi-rediyo-agent

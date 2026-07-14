@@ -97,9 +97,7 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
     "chauffage",
   }
 
-  if match is None and (
-    "zigbee" in words or (_contains_any(normalized, zigbee_actions) and words & zigbee_devices)
-  ):
+  if match is None and ("zigbee" in words or (_contains_any(normalized, zigbee_actions) and words & zigbee_devices)):
     match = RoutingMatch(Service.ZIGBEE, 0.98, "device action and device noun")
 
   if match is None and _is_explanation_request(normalized, words):
@@ -110,7 +108,7 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
     or "podcast episode" in normalized
     or _contains_any(normalized, ("latest episode", "dernier episode"))
   ):
-    match = RoutingMatch(Service.KANSA, 0.96, "podcast terminology")
+    match = RoutingMatch(Service.OREMI_KANSA, 0.96, "podcast terminology")
 
   radio_actions = {"listen", "play", "stream", "tune", "mets", "met"}
   radio_word_match = "radio" in words
@@ -118,7 +116,7 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
   radio_phrase_match = _contains_any(normalized, ("tune in", "radio station", "bbc radio", "france inter"))
 
   if match is None and (radio_word_match or station_action_match or radio_phrase_match):
-    match = RoutingMatch(Service.REDIYO, 0.96, "radio terminology")
+    match = RoutingMatch(Service.OREMI_REDIYO, 0.96, "radio terminology")
 
   if match is None and (
     words & {"alarm", "reminder", "timer", "rappel", "rappelle", "planifie", "planifier"}
@@ -127,13 +125,31 @@ def rule_route(text: str, context: dict[str, Any] | None = None) -> RoutingMatch
       ("remind me", "wake me", "schedule a", "set an alarm", "set a timer", "rappelle moi"),
     )
   ):
-    match = RoutingMatch(Service.ISINMI, 0.96, "scheduling terminology")
+    match = RoutingMatch(Service.OREMI_ISINMI, 0.96, "scheduling terminology")
 
   if match is None and (
-    words & {"weather", "forecast", "temperature", "pollen", "alert", "alerts", "warning", "warnings", "meteo"}
-    or _contains_any(normalized, ("air quality", "quel temps"))
+    words
+    & {
+      "weather",
+      "forecast",
+      "temperature",
+      "pollen",
+      "alert",
+      "alerts",
+      "warning",
+      "warnings",
+      "meteo",
+      "soleil",
+      "sun",
+      "sunrise",
+      "sunset",
+    }
+    or _contains_any(
+      normalized,
+      ("air quality", "quel temps", "coucher le soleil", "lever le soleil", "sun rise", "sun set"),
+    )
   ):
-    match = RoutingMatch(Service.WEATHER, 0.95, "weather terminology")
+    match = RoutingMatch(Service.OREMI_OJO, 0.95, "weather terminology")
 
   return match
 

@@ -70,11 +70,11 @@ async def test_router_generation_is_deterministic(monkeypatch):
 @pytest.mark.asyncio
 async def test_command_agent_classifies_all_payload_examples(monkeypatch):
   expected_services = {
-    "weather": Service.WEATHER,
-    "Weather forecast (EN)": Service.WEATHER,
-    "Météo (FR)": Service.WEATHER,
-    "Pollen count (EN)": Service.WEATHER,
-    "Alerte Pollen (FR)": Service.WEATHER,
+    "weather": Service.OREMI_OJO,
+    "Weather forecast (EN)": Service.OREMI_OJO,
+    "Météo (FR)": Service.OREMI_OJO,
+    "Pollen count (EN)": Service.OREMI_OJO,
+    "Alerte Pollen (FR)": Service.OREMI_OJO,
     "zigbee": Service.ZIGBEE,
     "Control Zigbee device (EN)": Service.ZIGBEE,
     "Contrôler un appareil Zigbee (FR)": Service.ZIGBEE,
@@ -82,15 +82,15 @@ async def test_command_agent_classifies_all_payload_examples(monkeypatch):
     "Éteindre la lumière de la chambre (FR)": Service.ZIGBEE,
     "General Chat (EN)": Service.CHAT,
     "Discussion générale (FR)": Service.CHAT,
-    "reminder": Service.ISINMI,
-    "Set a reminder (EN)": Service.ISINMI,
-    "Créer un rappel (FR)": Service.ISINMI,
-    "Schedule recurring event (EN)": Service.ISINMI,
-    "Planifier un événement (FR)": Service.ISINMI,
-    "Play Radio (EN)": Service.REDIYO,
-    "Lancer la radio (FR)": Service.REDIYO,
-    "Play Podcast (EN)": Service.KANSA,
-    "Lancer un podcast (FR)": Service.KANSA,
+    "reminder": Service.OREMI_ISINMI,
+    "Set a reminder (EN)": Service.OREMI_ISINMI,
+    "Créer un rappel (FR)": Service.OREMI_ISINMI,
+    "Schedule recurring event (EN)": Service.OREMI_ISINMI,
+    "Planifier un événement (FR)": Service.OREMI_ISINMI,
+    "Play Radio (EN)": Service.OREMI_REDIYO,
+    "Lancer la radio (FR)": Service.OREMI_REDIYO,
+    "Play Podcast (EN)": Service.OREMI_KANSA,
+    "Lancer un podcast (FR)": Service.OREMI_KANSA,
   }
   use_model(monkeypatch, TestModel(custom_output_args={"service": "chat", "confidence": 0.1}))
 

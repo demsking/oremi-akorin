@@ -44,4 +44,8 @@ Version numbers follow the `MAJOR.MINOR.PATCH` format:
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](https://gitlab.com/demsking/oremi-akorin/-/blob/main/LICENSE).
+Copyright 2026 Sébastien Demanou. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0. See the
+[LICENSE](https://gitlab.com/demsking/oremi-akorin/-/blob/main/LICENSE) for the
+complete license text.

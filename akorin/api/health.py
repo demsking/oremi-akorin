@@ -72,10 +72,10 @@ def get_app_settings(request: Request) -> Settings:
               "version": APP_VERSION,
               "llm_model": "ollama:qwen3.5:2b",
               "components": {
-                Service.ISINMI: "available",
-                Service.WEATHER: "available",
-                Service.REDIYO: "available",
-                Service.KANSA: "available",
+                Service.OREMI_ISINMI: "available",
+                Service.OREMI_OJO: "available",
+                Service.OREMI_REDIYO: "available",
+                Service.OREMI_KANSA: "available",
               },
               "mqtt": "connected",
             }
@@ -90,8 +90,7 @@ async def health(request: Request) -> ServerHealth:
   context: AppContext = request.app.state.context
 
   components = {
-    service: "available" if context.component_statuses.get(service, False) else "unavailable"
-    for service in context.components
+    service: "available" if context.component_statuses.get(service, False) else "unavailable" for service in context.components
   }
 
   healthy = all(context.component_statuses.get(service, False) for service in context.components)

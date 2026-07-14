@@ -73,7 +73,7 @@ async def html_documentation():
             content: openapi,
             hideClientButton: true,
             hideTestRequestButton: isGitlabPage,
-            expandAllModelSections: true,
+            expandAllModelSections: false,
             showSidebar: true,
             showDeveloperTools: 'localhost',
             operationTitleSource: 'summary',

@@ -15,7 +15,7 @@
 from .base import ComponentClient
 from .isinmi import IsinmiClient
 from .kansa import KansaClient
+from .ojo import OjoClient
 from .rediyo import RediyoClient
-from .weather import WeatherClient
 
-__all__ = ["ComponentClient", "IsinmiClient", "KansaClient", "RediyoClient", "WeatherClient"]
+__all__ = ["ComponentClient", "IsinmiClient", "KansaClient", "OjoClient", "RediyoClient"]

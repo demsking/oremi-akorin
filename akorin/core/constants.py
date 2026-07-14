@@ -21,11 +21,11 @@ class Language(StrEnum):
 
 
 class Service(StrEnum):
-  DEVICE = "device"
-  ISINMI = "isinmi"
-  WEATHER = "weather"
-  REDIYO = "rediyo"
-  KANSA = "kansa"
+  OREMI_DEVICE = "device"
+  OREMI_ISINMI = "isinmi"
+  OREMI_OJO = "ojo"
+  OREMI_REDIYO = "rediyo"
+  OREMI_KANSA = "kansa"
   ZIGBEE = "zigbee"
   TOOL = "tool"
   CHAT = "chat"

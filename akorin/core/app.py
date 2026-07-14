@@ -31,8 +31,8 @@ from ..components.base import ensure_components_available
 from ..components.base import monitor_unavailable_components
 from ..components.isinmi import IsinmiClient
 from ..components.kansa import KansaClient
+from ..components.ojo import OjoClient
 from ..components.rediyo import RediyoClient
-from ..components.weather import WeatherClient
 from ..components.zigbee import ZigbeeComponent
 from ..llm.agents.response import ResponseAgent
 from ..llm.agents.zigbee_command import ZigbeeCommandAgent
@@ -86,16 +86,16 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       safe_url(settings.ollama_base_url_string if settings.ollama_base_url is not None else None),
     )
     logger.info(
-      "App settings [generation]: request_timeout=%s temperature=%s max_response_tokens=%s system_prompt=%s",
+      "App settings [generation]: llm_request_timeout=%s temperature=%s llm_max_response_tokens=%s system_prompt=%s",
       settings.llm_request_timeout,
       settings.llm_temperature,
-      settings.max_response_tokens,
+      settings.llm_max_response_tokens,
       settings.llm_system_prompt.replace("\n", " ").strip(),
     )
     logger.info(
       "App settings [components]: isinmi=%s weather=%s rediyo=%s kansa=%s",
       safe_url(settings.isinmi_url),
-      safe_url(settings.weather_url),
+      safe_url(settings.ojo_url),
       safe_url(settings.rediyo_url),
       safe_url(settings.kansa_url),
     )
@@ -113,22 +113,23 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     logger.info("App settings [logging]: level=%s destination=%s", settings.log_level, settings.log_file or "stderr")
     logger.info(
       "App settings [smart_cache]: enabled=%s max_entries=%s llm_ttl_seconds=%s component_ttl_seconds=%s",
-      settings.cache_enabled,
-      settings.cache_max_entries,
-      settings.cache_llm_ttl_seconds,
-      settings.cache_component_ttl_seconds,
+      settings.llm_cache_enabled,
+      settings.llm_cache_max_entries,
+      settings.llm_cache_ttl_seconds,
+      settings.component_cache_ttl_seconds,
     )
     logger.info(
-      "App settings [performance]: request_budget=%ss spellcheck_timeout=%ss route_timeout=%ss component_stale=%ss circuit_breaker=%s",
+      "App settings [performance]: request_budget=%ss spellcheck_timeout=%ss route_timeout=%ss http_request_timeout=%ss component_stale=%ss circuit_breaker=%s",  # pylint: disable=line-too-long
       settings.request_budget_seconds,
       settings.spellcheck_timeout_seconds,
       settings.route_timeout_seconds,
-      settings.cache_component_stale_seconds,
+      settings.http_request_timeout,
+      settings.component_cache_stale_seconds,
       settings.component_circuit_breaker_enabled,
     )
 
-    client = http_client or httpx.AsyncClient(timeout=settings.request_timeout)
-    smart_cache = SmartCache(enabled=settings.cache_enabled, max_entries=settings.cache_max_entries)
+    client = http_client or httpx.AsyncClient(timeout=settings.http_request_timeout)
+    smart_cache = SmartCache(enabled=settings.llm_cache_enabled, max_entries=settings.llm_cache_max_entries)
 
     if settings.uses_ollama():
       if settings.ollama_base_url is None:
@@ -140,10 +141,10 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     response_agent = ResponseAgent(settings, client, smart_cache)
 
     configured_components = (
-      (Service.ISINMI, settings.isinmi_url, IsinmiClient),
-      (Service.WEATHER, settings.weather_url, WeatherClient),
-      (Service.REDIYO, settings.rediyo_url, RediyoClient),
-      (Service.KANSA, settings.kansa_url, KansaClient),
+      (Service.OREMI_ISINMI, settings.isinmi_url, IsinmiClient),
+      (Service.OREMI_OJO, settings.ojo_url, OjoClient),
+      (Service.OREMI_REDIYO, settings.rediyo_url, RediyoClient),
+      (Service.OREMI_KANSA, settings.kansa_url, KansaClient),
     )
 
     components: dict[Service, ComponentClient] = {
@@ -154,8 +155,8 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
 
     for component in components.values():
       component.cache = smart_cache
-      component.cache_ttl_seconds = settings.cache_component_ttl_seconds
-      component.cache_stale_seconds = settings.cache_component_stale_seconds
+      component.cache_ttl_seconds = settings.component_cache_ttl_seconds
+      component.cache_stale_seconds = settings.component_cache_stale_seconds
       component.circuit_breaker_enabled = settings.component_circuit_breaker_enabled
       component.circuit_breaker_failures = settings.component_circuit_breaker_failures
       component.circuit_breaker_cooldown_seconds = settings.component_circuit_breaker_cooldown_seconds

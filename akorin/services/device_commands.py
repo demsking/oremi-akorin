@@ -55,15 +55,15 @@ def select_device_commands(response: ProcessResponse) -> list[OremiDeviceCommand
     return []
 
   try:
-    if response.service == Service.REDIYO:
+    if response.service == Service.OREMI_REDIYO:
       return _media_commands(response.message, _nested(response.data, "station", "url"))
 
-    if response.service == Service.KANSA:
+    if response.service == Service.OREMI_KANSA:
       episodes = _nested(response.data, "podcast", "episodes")
       media_url = episodes[0].get("media_url") if isinstance(episodes, list) and episodes else None
       return _media_commands(response.message, media_url)
 
-    if response.service == Service.ISINMI:
+    if response.service == Service.OREMI_ISINMI:
       return _schedule_commands(response.message, response.data)
   except (TypeError, ValidationError, ValueError) as exception:
     logger.warning(f"Could not select Oremi Device commands for {response.service}: {exception}")

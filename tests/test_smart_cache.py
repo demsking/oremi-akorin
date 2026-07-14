@@ -38,7 +38,7 @@ class CachedComponent(ComponentClient):
 @pytest.mark.asyncio
 async def test_smart_cache_reuses_internal_llm_calls():
   cache = SmartCache(enabled=True, max_entries=10)
-  settings = Settings(llm_model="test", cache_llm_ttl_seconds=60)
+  settings = Settings(llm_model="test", llm_cache_ttl_seconds=60)
   client = httpx.AsyncClient()
   agent = CachedAgent(settings, client, cache)
 
@@ -116,7 +116,7 @@ async def test_component_get_requests_are_cached_by_stable_request_inputs():
 
   cache = SmartCache(enabled=True, max_entries=10)
   client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://service.example")
-  component = CachedComponent(Service.WEATHER, "https://service.example", client, cache, cache_ttl_seconds=60)
+  component = CachedComponent(Service.OREMI_OJO, "https://service.example", client, cache, cache_ttl_seconds=60)
 
   try:
     first = await component.request_json("GET", params={"q": "weather in Paris"})
@@ -143,11 +143,39 @@ async def test_component_cache_bypasses_volatile_context_inputs():
 
   cache = SmartCache(enabled=True, max_entries=10)
   client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://service.example")
-  component = CachedComponent(Service.WEATHER, "https://service.example", client, cache, cache_ttl_seconds=60)
+  component = CachedComponent(Service.OREMI_OJO, "https://service.example", client, cache, cache_ttl_seconds=60)
 
   try:
     first = await component.request_json("GET", params={"context": {"datetime": "2026-07-10T12:00:00+02:00"}})
     second = await component.request_json("GET", params={"context": {"datetime": "2026-07-10T12:00:00+02:00"}})
+  finally:
+    await client.aclose()
+
+  assert first == {"message": "response 1"}
+  assert second == {"message": "response 2"}
+  assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_component_cache_bypasses_serialized_volatile_context_inputs():
+  calls = 0
+
+  async def handler(request):
+    nonlocal calls
+    calls += 1
+
+    return httpx.Response(200, json={"message": f"response {calls}"})
+
+  cache = SmartCache(enabled=True, max_entries=10)
+  client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://service.example")
+  component = CachedComponent(Service.OREMI_OJO, "https://service.example", client, cache, cache_ttl_seconds=60)
+
+  try:
+    params = {
+      "q": 'Quel temps fait-il ici ?\n\nContext: {"datetime":"2026-07-10T12:00:00+02:00"}',
+    }
+    first = await component.request_json("GET", params=params)
+    second = await component.request_json("GET", params=params)
   finally:
     await client.aclose()
 
@@ -168,7 +196,7 @@ async def test_component_circuit_breaker_fails_fast_after_repeated_errors():
 
   client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://service.example")
   component = CachedComponent(
-    Service.WEATHER,
+    Service.OREMI_OJO,
     "https://service.example",
     client,
     circuit_breaker_enabled=True,

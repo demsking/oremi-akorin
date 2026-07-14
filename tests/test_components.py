@@ -10,7 +10,7 @@ from akorin.components.isinmi import IsinmiClient
 from akorin.components.isinmi import ServerHealth
 from akorin.components.kansa import KansaClient
 from akorin.components.rediyo import RediyoClient
-from akorin.components.weather import WeatherClient
+from akorin.components.ojo import OjoClient
 from akorin.components.base import monitor_unavailable_components
 from akorin.components.zigbee import DEVICES_TOPIC
 from akorin.components.zigbee import ORIGINAL_TEXT_CONTEXT_KEY
@@ -132,7 +132,7 @@ async def test_isinmi_uses_natural_language_request_contract():
     return httpx.Response(201, json={"response_message": "Rappel créé.", "data": {"action": "create"}})
 
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    component = IsinmiClient(Service.ISINMI, "http://isinmi.test", client)
+    component = IsinmiClient(Service.OREMI_ISINMI, "http://isinmi.test", client)
     message, data = await component.process(
       "Rappelle-moi la réunion demain",
       "fr",
@@ -170,7 +170,7 @@ async def test_isinmi_service_info_uses_richer_health_model():
     )
 
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    component = IsinmiClient(Service.ISINMI, "http://isinmi.test", client)
+    component = IsinmiClient(Service.OREMI_ISINMI, "http://isinmi.test", client)
     info = await component.get_service_info()
 
   assert captured is not None
@@ -192,7 +192,7 @@ async def test_weather_uses_climate_query_contract():
     return httpx.Response(200, json={"message": "Il fait beau.", "provider": "Open-Météo"})
 
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    component = WeatherClient(Service.WEATHER, "http://weather.test", client)
+    component = OjoClient(Service.OREMI_OJO, "http://weather.test", client)
     message, _ = await component.process(
       "Quel temps fait-il à Paris ?",
       "fr",
@@ -212,6 +212,47 @@ async def test_weather_uses_climate_query_contract():
 
 
 @pytest.mark.asyncio
+async def test_weather_context_location_overrides_local_request_after_rewrite():
+  captured = None
+
+  def handler(request: httpx.Request) -> httpx.Response:
+    nonlocal captured
+    captured = request
+    return httpx.Response(200, json={"message": "Il fait beau à Douala.", "provider": "Open-Météo"})
+
+  async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+    component = OjoClient(Service.OREMI_OJO, "http://weather.test", client)
+    message, _ = await component.process(
+      "Quelle est la température à Paris aujourd'hui ?",
+      "fr",
+      {
+        "_oremi_original_text": "Quel temps fait-il ici ?",
+        "location": "Deido, Douala, Cameroun",
+        "timezone": "Africa/Douala",
+        "temperature_unit": "celsius",
+        "lat": 4.0637626,
+        "lon": 9.7151827,
+        "datetime": "2026-07-10T07:36:49.673555+02:00",
+      },
+      [],
+    )
+
+  assert captured is not None
+  assert dict(captured.url.params) == {
+    "q": (
+      "Quel temps fait-il ici ?\n"
+      "Lieu: Deido, Douala, Cameroun\n\n"
+      'Context: {"datetime":"2026-07-10T07:36:49.673555+02:00","lat":4.0637626,'
+      '"location":"Deido, Douala, Cameroun","lon":9.7151827,"temperature_unit":"celsius",'
+      '"timezone":"Africa/Douala"}'
+    ),
+    "timezone": "Africa/Douala",
+    "temperature-unit": "celsius",
+  }
+  assert message == "Il fait beau à Douala."
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("first_failure", ["connection", "status"])
 async def test_component_retries_transient_unavailability(first_failure):
   attempts = 0
@@ -226,7 +267,7 @@ async def test_component_retries_transient_unavailability(first_failure):
     return httpx.Response(200, json={"message": "Sunny"})
 
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    component = WeatherClient(Service.WEATHER, "http://weather.test", client)
+    component = OjoClient(Service.OREMI_OJO, "http://weather.test", client)
     message, _ = await component.process("Weather in Paris", "en", {}, [])
 
   assert attempts == 2
@@ -251,12 +292,12 @@ async def test_background_monitor_recovers_component_availability():
       return Info(name="weather", version="1.0")
 
   component = FlakyAvailabilityComponent()
-  statuses = {Service.WEATHER: False}
+  statuses = {Service.OREMI_OJO: False}
   stop_event = asyncio.Event()
 
   task = asyncio.create_task(
     monitor_unavailable_components(
-      {Service.WEATHER: component},  # type: ignore[arg-type]
+      {Service.OREMI_OJO: component},  # type: ignore[arg-type]
       statuses,
       stop_event=stop_event,
       interval_seconds=0.01,
@@ -267,7 +308,7 @@ async def test_background_monitor_recovers_component_availability():
   stop_event.set()
   await task
 
-  assert statuses[Service.WEATHER] is True
+  assert statuses[Service.OREMI_OJO] is True
 
 
 @pytest.mark.asyncio
@@ -280,7 +321,7 @@ async def test_weather_uses_alert_query_contract():
     return httpx.Response(200, json={"message": "Air quality alert."})
 
   async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-    component = WeatherClient(Service.WEATHER, "http://weather.test", client)
+    component = OjoClient(Service.OREMI_OJO, "http://weather.test", client)
     await component.process(
       "Are there air quality alerts?",
       "en",

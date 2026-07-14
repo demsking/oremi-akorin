@@ -73,7 +73,7 @@ class Settings(BaseSettings):
 
   llm_system_prompt: str = Field(
     default=(
-      "You are Oremi, a concise and helpful bilingual personal assistant. "
+      "You are Oremi, a concise and helpful personal assistant. "
       "Give only the answer intended for the user; "
       "do not include hidden reasoning, prompt commentary, or context commentary. "
       "Use available tools and configured Oremi services whenever they can provide factual, current, or actionable results. "
@@ -91,22 +91,22 @@ class Settings(BaseSettings):
 
   isinmi_url: HttpUrl | None = Field(
     default=None,
-    description="Base URL for the Isinmi service.",
+    description="Base URL for the Oremi Isinmi service.",
   )
 
-  weather_url: HttpUrl | None = Field(
+  ojo_url: HttpUrl | None = Field(
     default=None,
-    description="Base URL for weather forecasts and alerts.",
+    description="Base URL for the Oremi Ojọ service.",
   )
 
   rediyo_url: HttpUrl | None = Field(
     default=None,
-    description="Base URL for the Rediyo service.",
+    description="Base URL for the Oremi Rediyo service.",
   )
 
   kansa_url: HttpUrl | None = Field(
     default=None,
-    description="Base URL for the Kansa service.",
+    description="Base URL for the Oremi Kansa service.",
   )
 
   # MQTT is optional - all settings can be omitted if not using MQTT
@@ -154,50 +154,36 @@ class Settings(BaseSettings):
     description="Path to CA certificate file for MQTT TLS verification.",
   )
 
-  request_timeout: float = Field(
+  http_request_timeout: float = Field(
     default=30.0,
     gt=1.0,
     description="Global timeout in seconds for HTTP requests to external services. Default: 30.0.",
   )
 
-  max_response_tokens: int = Field(
+  llm_max_response_tokens: int = Field(
     default=500,
     gt=10,
     le=4096,
     description="Maximum number of tokens to generate in LLM responses. Default: 500.",
   )
 
-  cache_enabled: bool = Field(
+  llm_cache_enabled: bool = Field(
     default=True,
     description="Enable the bounded internal cache for repeated LLM and idempotent component calls.",
   )
 
-  cache_max_entries: int = Field(
+  llm_cache_max_entries: int = Field(
     default=512,
     ge=0,
     le=10000,
     description="Maximum number of internal smart-cache entries kept in memory. Set to 0 to disable caching.",
   )
 
-  cache_llm_ttl_seconds: float = Field(
+  llm_cache_ttl_seconds: float = Field(
     default=300.0,
     ge=0.0,
     le=3600.0,
     description="TTL in seconds for cacheable internal LLM calls.",
-  )
-
-  cache_component_ttl_seconds: float = Field(
-    default=30.0,
-    ge=0.0,
-    le=600.0,
-    description="TTL in seconds for cacheable idempotent component HTTP calls.",
-  )
-
-  cache_component_stale_seconds: float = Field(
-    default=120.0,
-    ge=0.0,
-    le=3600.0,
-    description="Additional stale window in seconds for idempotent component HTTP calls while refreshing in the background.",
   )
 
   request_budget_seconds: float = Field(
@@ -226,6 +212,20 @@ class Settings(BaseSettings):
     ge=0,
     le=500,
     description="Skip LLM spellcheck for short clean command-like requests up to this length. Set to 0 to disable.",
+  )
+
+  component_cache_ttl_seconds: float = Field(
+    default=30.0,
+    ge=0.0,
+    le=600.0,
+    description="TTL in seconds for cacheable idempotent component HTTP calls.",
+  )
+
+  component_cache_stale_seconds: float = Field(
+    default=120.0,
+    ge=0.0,
+    le=3600.0,
+    description="Additional stale window in seconds for idempotent component HTTP calls while refreshing in the background.",
   )
 
   component_circuit_breaker_enabled: bool = Field(
@@ -284,7 +284,7 @@ class Settings(BaseSettings):
 
     return value
 
-  @field_validator("isinmi_url", "weather_url", "rediyo_url", "kansa_url")
+  @field_validator("isinmi_url", "ojo_url", "rediyo_url", "kansa_url")
   @classmethod
   def validate_component_base_url(cls, value):
     if value is not None and (value.path not in {"", "/"} or value.query or value.fragment):
@@ -318,10 +318,10 @@ class Settings(BaseSettings):
   def service_urls(self) -> dict[Service, HttpUrl | None]:
     """Get all service URLs as a dictionary."""
     return {
-      Service.ISINMI: self.isinmi_url,
-      Service.WEATHER: self.weather_url,
-      Service.REDIYO: self.rediyo_url,
-      Service.KANSA: self.kansa_url,
+      Service.OREMI_ISINMI: self.isinmi_url,
+      Service.OREMI_OJO: self.ojo_url,
+      Service.OREMI_REDIYO: self.rediyo_url,
+      Service.OREMI_KANSA: self.kansa_url,
     }
 
   @property

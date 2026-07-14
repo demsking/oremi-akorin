@@ -26,8 +26,8 @@ from ..core.models import ProcessResponse
 API_TAG_METADATA = {
   "name": "Agent Processing",
   "description": (
-    "Process English or French natural-language requests and route them to "
-    "LLM model, built-in tools, knowledge sources, or configured Oremi services."
+    "Process natural-language requests and route them to LLM model, built-in "
+    "tools, knowledge sources, or configured Oremi services."
   ),
 }
 
@@ -60,16 +60,14 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
     "value": ProcessRequest.model_validate(
       {
         "message": "What's the weather like in Lagos?",
-        "context": {"preferences": {"timezone": "Africa/Lagos", "temperature_unit": "celsius"}},
+        "context": {"timezone": "Africa/Lagos", "temperature_unit": "celsius"},
       }
     ),
   },
   "Météo (FR)": {
     "summary": "Prévisions météo (FR)",
     "description": "Demande d'informations météo pour une ville spécifique.",
-    "value": ProcessRequest.model_validate(
-      {"message": "Quel temps fait-il à Paris ?", "context": {"preferences": OREMI_DEVICE_PREFERENCES_EXAMPLE}}
-    ),
+    "value": ProcessRequest.model_validate({"message": "Quel temps fait-il à Paris ?"}),
   },
   "Weather with Oremi Device context": {
     "summary": "Weather with Oremi Device context",
@@ -77,7 +75,7 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
     "value": ProcessRequest.model_validate(
       {
         "message": "Quel temps fait-il ici ?",
-        "context": {"preferences": OREMI_DEVICE_PREFERENCES_EXAMPLE},
+        "context": OREMI_DEVICE_PREFERENCES_EXAMPLE,
         "tags": ["device_id:oremi-device"],
       }
     ),
@@ -89,7 +87,7 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
     "value": ProcessRequest.model_validate(
       {
         "message": "Are pollen levels high in Lyon today?",
-        "context": {"alert_service": "pollen", "lat": 45.7640, "lon": 4.8357, "timezone": "Europe/Paris"},
+        "context": {"lat": 45.7640, "lon": 4.8357, "timezone": "Europe/Paris"},
       }
     ),
   },
@@ -99,7 +97,7 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
     "value": ProcessRequest.model_validate(
       {
         "message": "Est-ce qu'il y a du pollen à Lyon en ce moment ?",
-        "context": {"alert_service": "pollen", "lat": 45.7640, "lon": 4.8357, "timezone": "Europe/Paris"},
+        "context": {"lat": 45.7640, "lon": 4.8357, "timezone": "Europe/Paris"},
       }
     ),
   },
@@ -110,7 +108,7 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
     "value": ProcessRequest.model_validate(
       {
         "message": "Allume la lumière de la chambre",
-        "context": {"preferences": OREMI_DEVICE_PREFERENCES_EXAMPLE},
+        "context": OREMI_DEVICE_PREFERENCES_EXAMPLE,
         "tags": ["room:bedroom", "device_id:oremi-device"],
       }
     ),
@@ -199,7 +197,7 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
     "value": ProcessRequest.model_validate(
       {
         "message": "Rappelle-moi de sortir les poubelles ce soir à 20h",
-        "context": {"preferences": OREMI_DEVICE_PREFERENCES_EXAMPLE},
+        "context": OREMI_DEVICE_PREFERENCES_EXAMPLE,
         "tags": ["device_id:oremi-device"],
       }
     ),
@@ -254,7 +252,7 @@ RESPONSE_EXAMPLES: dict[str, Example] = {
         "ok": True,
         "input": "What's the weather like in Lagos?",
         "language": "en",
-        "service": "weather",
+        "service": "ojo",
         "message": "It's currently 28.4°C in Lagos with clear skies. Enjoy your day!",
         "data": {
           "provider": "Open-Météo",
@@ -329,7 +327,7 @@ RESPONSE_EXAMPLES: dict[str, Example] = {
         "ok": False,
         "input": "Are there weather alerts?",
         "language": "en",
-        "service": "weather",
+        "service": "ojo",
         "message": "Please share a location so I can check alerts for that area.",
         "data": {"error": {"type": "more_information_required"}},
         "confidence": 0.95,

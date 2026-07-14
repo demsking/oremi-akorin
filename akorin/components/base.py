@@ -26,6 +26,7 @@ from pydantic import Field
 
 from ..core.constants import Service
 from ..core.exceptions import ComponentUnavailable
+from ..core.oremi import OremiAgentRequest
 from ..utils.cache import has_volatile_context
 from ..utils.cache import SmartCache
 from ..utils.http_retry import request_with_retry
@@ -95,7 +96,21 @@ class ComponentClient:
     return str(httpx.URL(self.base_url).copy_with(path=path, query=None, fragment=None))
 
   async def process(self, message: str, language: str, context: dict[str, Any], tags: list[str]) -> tuple[str, Any]:
-    raise NotImplementedError
+    payload = OremiAgentRequest(
+      message=message,
+      context=context,
+      tags=tags,
+    )
+
+    data = await self.request_json(
+      method="POST",
+      json=payload.model_dump(),
+    )
+
+    return self._parse_process_response(data)
+
+  def _parse_process_response(self, data: dict[str, Any]) -> tuple[str, Any]:
+    return data["message"], data["data"]
 
   def request_context(self, context: dict[str, Any]) -> str | None:
     return request_context(context)
