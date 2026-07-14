@@ -50,3 +50,4 @@ def configure_logging(level: str, log_file: str | None) -> None:
 
   logging.getLogger("httpcore.http11").setLevel(logging.INFO)
   logging.getLogger("httpcore.connection").setLevel(logging.INFO)
+  logging.getLogger("httpx").setLevel(logging.WARNING)
