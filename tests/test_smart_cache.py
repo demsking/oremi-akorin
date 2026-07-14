@@ -2,12 +2,14 @@ import asyncio
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from akorin.components.base import ComponentClient
 from akorin.core.constants import Service
 from akorin.core.exceptions import ComponentUnavailable
 from akorin.core.settings import Settings
 from akorin.llm.agent import AgentClient
+from akorin.llm.agents.command import RouteDecision
 from akorin.utils.cache import SmartCache
 
 
@@ -29,6 +31,14 @@ class DummyAgent:
 class CachedAgent(AgentClient[str]):
   def _create_agent(self):
     return DummyAgent()
+
+
+class ParsedCachedAgent(CachedAgent):
+  def _parse_output(self, output):
+    if output == "bad":
+      raise ValueError("invalid generated output")
+
+    return output
 
 
 class CachedComponent(ComponentClient):
@@ -53,6 +63,82 @@ async def test_smart_cache_reuses_internal_llm_calls():
   assert second == "same prompt:1"
   assert third == "different prompt:2"
   assert agent.agent.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_smart_cache_does_not_store_failed_llm_parse():
+  cache = SmartCache(enabled=True, max_entries=10)
+  settings = Settings(llm_model="test", llm_cache_ttl_seconds=60)
+  client = httpx.AsyncClient()
+  agent = ParsedCachedAgent(settings, client, cache)
+  outputs = iter(["bad", "good"])
+
+  async def run(prompt):
+    return DummyResult(next(outputs))
+
+  agent.agent.run = run
+
+  try:
+    with pytest.raises(ValueError, match="invalid generated output"):
+      await agent._run("same prompt")
+
+    response = await agent._run("same prompt")
+  finally:
+    await client.aclose()
+
+  assert response == "good"
+  assert cache.stats.stores == 1
+  assert cache.stats.misses == 2
+
+
+@pytest.mark.asyncio
+async def test_native_ollama_cache_does_not_store_invalid_structured_response():
+  class FakeMessage:
+    tool_calls = None
+
+    def __init__(self, content):
+      self.content = content
+
+  class FakeResponse:
+    def __init__(self, content):
+      self.message = FakeMessage(content)
+
+  class FakeOllamaClient:
+    def __init__(self):
+      self.calls = 0
+
+    async def chat(self, **kwargs):
+      self.calls += 1
+
+      if self.calls == 1:
+        return FakeResponse("not json")
+
+      return FakeResponse('{"service":"chat","confidence":0.9}')
+
+  cache = SmartCache(enabled=True, max_entries=10)
+  settings = Settings(llm_model="ollama:qwen3.5:2b", ollama_base_url="http://ollama.test:11434", llm_cache_ttl_seconds=60)
+  client = httpx.AsyncClient()
+  agent = CachedAgent(settings, client, cache)
+  fake_ollama = FakeOllamaClient()
+  agent.ollama_client = fake_ollama
+
+  try:
+    with pytest.raises(ValidationError):
+      await agent._run_ollama("same prompt", system_prompt=None, output_type=RouteDecision, response_format="json")
+
+    response = await agent._run_ollama(
+      "same prompt",
+      system_prompt=None,
+      output_type=RouteDecision,
+      response_format="json",
+    )
+  finally:
+    await client.aclose()
+
+  assert response == RouteDecision(service=Service.CHAT, confidence=0.9)
+  assert fake_ollama.calls == 2
+  assert cache.stats.stores == 1
+  assert cache.stats.misses == 2
 
 
 @pytest.mark.asyncio

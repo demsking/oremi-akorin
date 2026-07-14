@@ -159,18 +159,18 @@ class AgentClient(Generic[OutputModel], ABC):
         options=self._ollama_options(model_settings),
       )
 
-      return response.message.content or ""
+      content = response.message.content or ""
 
-    content = (
+      if isinstance(output_type, type) and issubclass(output_type, BaseModel):
+        return output_type.model_validate_json(content)
+
+      return content
+
+    return (
       await self.cache.get_or_set(cache_key, self.settings.llm_cache_ttl_seconds, run_request)
       if self.cache is not None and cache_key is not None
       else await run_request()
     )
-
-    if isinstance(output_type, type) and issubclass(output_type, BaseModel):
-      return output_type.model_validate_json(content)
-
-    return content
 
   async def _run(self, prompt: str) -> OutputModel:
     if self.uses_native_ollama:
@@ -189,15 +189,13 @@ class AgentClient(Generic[OutputModel], ABC):
     async def run_request() -> Any:
       result: Any = await self.agent.run(prompt)  # pyright: ignore
 
-      return result.output
+      return self._parse_output(result.output)
 
-    output = (
+    return (
       await self.cache.get_or_set(cache_key, self.settings.llm_cache_ttl_seconds, run_request)
       if self.cache is not None and cache_key is not None
       else await run_request()
     )
-
-    return self._parse_output(output)
 
   @staticmethod
   def _build_tool_function(
