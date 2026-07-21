@@ -12,18 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from typing import Any
-
-from .base import ComponentClient
+from akorin.core.components import ComponentClient
 
 
 class RediyoClient(ComponentClient):
-  endpoint_path = "/api/ask"
-
-  async def process(self, message: str, language: str, context: dict[str, Any], tags: list[str]) -> tuple[str, Any]:
-    data = await self.request_json(
-      method="GET",
-      params={"query": self.contextualized_text(message, context), "language": language},
-    )
-
-    return self.parse_response(data)
+  pass

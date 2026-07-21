@@ -17,20 +17,22 @@ from fastapi import HTTPException
 from fastapi.responses import FileResponse
 from fastapi.responses import HTMLResponse
 
-from ..core.package import PROJECT_DIRECTORY
-from ..core.package import STATIC_DIR
+from akorin.core.package import HTDOCS_DIR
+from akorin.core.package import PROJECT_DIRECTORY
 
 router = APIRouter(prefix="/docs")
 
 DOCUMENTATION_PATH = PROJECT_DIRECTORY / "DOCUMENTATION.md"
-SERVICE_DESCRIPTION = DOCUMENTATION_PATH.read_text(encoding="utf-8")
+SERVICE_DESCRIPTION = (
+  DOCUMENTATION_PATH.read_text(encoding="utf-8").replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
+)
 
 
 @router.get("/static/{file_path:path}", include_in_schema=False)
 async def static_asset(file_path: str) -> FileResponse:
-  asset = (STATIC_DIR / file_path).resolve()
+  asset = (HTDOCS_DIR / file_path).resolve()
 
-  if STATIC_DIR not in asset.parents and asset != STATIC_DIR:
+  if HTDOCS_DIR not in asset.parents and asset != HTDOCS_DIR:
     raise HTTPException(status_code=404, detail="Static asset not found")
 
   if not asset.is_file():
@@ -59,7 +61,7 @@ async def html_documentation():
           const isGitlabPage = location.origin.includes('gitlab.io');
 
           openapi.info.title = 'Oremi Akọrin Documentation';
-          openapi.info.description = "{SERVICE_DESCRIPTION.replace('"', '\\"').replace("\n", "\\n")}";
+          openapi.info.description = `{SERVICE_DESCRIPTION}`;
 
           if (isGitlabPage) {{
             openapi.servers = [];

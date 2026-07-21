@@ -12,16 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from typing import Any
-
-from ..core.oremi import OremiServerHealth
-from .base import ComponentClient
+from akorin.core.components import ComponentClient
 
 
 class IsinmiClient(ComponentClient):
-  endpoint_path = "/api/agent/chat"
-  server_path = "/health/"
-  server_info_model = OremiServerHealth
-
-  def _parse_process_response(self, data: dict[str, Any]) -> tuple[str, Any]:
-    return data["response_message"], data["data"]
+  pass

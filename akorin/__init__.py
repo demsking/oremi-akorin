@@ -17,8 +17,8 @@ import sys
 
 from pydantic import ValidationError
 
-from .core.app import create_app
-from .core.settings import get_settings
+from akorin.core.app import create_app
+from akorin.core.settings import get_settings
 
 logger = logging.getLogger(__name__)
 

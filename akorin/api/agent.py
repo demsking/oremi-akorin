@@ -18,9 +18,9 @@ from fastapi import Request
 from fastapi import status
 from fastapi.openapi.models import Example
 
-from ..core.context import AppContext
-from ..core.models import ProcessRequest
-from ..core.models import ProcessResponse
+from akorin.core.context import get_app_context_orchestrator
+from akorin.core.request import ProcessRequest
+from akorin.core.response import ProcessResponse
 
 
 API_TAG_METADATA = {
@@ -378,6 +378,6 @@ async def process_user_input(
   HTTP 200 responses include the processing result. Inspect `ok` to distinguish
   successful results from expected service or input failures.
   """
-  context: AppContext = request.app.state.context
+  orchestrator = get_app_context_orchestrator(request)
 
-  return await context.orchestrator.process(payload)
+  return await orchestrator.process(payload)

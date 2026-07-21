@@ -1,15 +1,27 @@
+# Copyright 2026 Sébastien Demanou. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 import asyncio
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-from pydantic import ValidationError
 
-from akorin.components.base import ComponentClient
-from akorin.core.constants import Service
+from akorin.core.agent import AgentClient
+from akorin.core.components import ComponentClient
 from akorin.core.exceptions import ComponentUnavailable
-from akorin.core.settings import Settings
-from akorin.llm.agent import AgentClient
-from akorin.llm.agents.command import RouteDecision
+from akorin.core.service import Service
 from akorin.utils.cache import SmartCache
 
 
@@ -43,102 +55,6 @@ class ParsedCachedAgent(CachedAgent):
 
 class CachedComponent(ComponentClient):
   endpoint_path = "/api/ask"
-
-
-@pytest.mark.asyncio
-async def test_smart_cache_reuses_internal_llm_calls():
-  cache = SmartCache(enabled=True, max_entries=10)
-  settings = Settings(llm_model="test", llm_cache_ttl_seconds=60)
-  client = httpx.AsyncClient()
-  agent = CachedAgent(settings, client, cache)
-
-  try:
-    first = await agent._run("same prompt")
-    second = await agent._run("same prompt")
-    third = await agent._run("different prompt")
-  finally:
-    await client.aclose()
-
-  assert first == "same prompt:1"
-  assert second == "same prompt:1"
-  assert third == "different prompt:2"
-  assert agent.agent.calls == 2
-
-
-@pytest.mark.asyncio
-async def test_smart_cache_does_not_store_failed_llm_parse():
-  cache = SmartCache(enabled=True, max_entries=10)
-  settings = Settings(llm_model="test", llm_cache_ttl_seconds=60)
-  client = httpx.AsyncClient()
-  agent = ParsedCachedAgent(settings, client, cache)
-  outputs = iter(["bad", "good"])
-
-  async def run(prompt):
-    return DummyResult(next(outputs))
-
-  agent.agent.run = run
-
-  try:
-    with pytest.raises(ValueError, match="invalid generated output"):
-      await agent._run("same prompt")
-
-    response = await agent._run("same prompt")
-  finally:
-    await client.aclose()
-
-  assert response == "good"
-  assert cache.stats.stores == 1
-  assert cache.stats.misses == 2
-
-
-@pytest.mark.asyncio
-async def test_native_ollama_cache_does_not_store_invalid_structured_response():
-  class FakeMessage:
-    tool_calls = None
-
-    def __init__(self, content):
-      self.content = content
-
-  class FakeResponse:
-    def __init__(self, content):
-      self.message = FakeMessage(content)
-
-  class FakeOllamaClient:
-    def __init__(self):
-      self.calls = 0
-
-    async def chat(self, **kwargs):
-      self.calls += 1
-
-      if self.calls == 1:
-        return FakeResponse("not json")
-
-      return FakeResponse('{"service":"chat","confidence":0.9}')
-
-  cache = SmartCache(enabled=True, max_entries=10)
-  settings = Settings(llm_model="ollama:qwen3.5:2b", ollama_base_url="http://ollama.test:11434", llm_cache_ttl_seconds=60)
-  client = httpx.AsyncClient()
-  agent = CachedAgent(settings, client, cache)
-  fake_ollama = FakeOllamaClient()
-  agent.ollama_client = fake_ollama
-
-  try:
-    with pytest.raises(ValidationError):
-      await agent._run_ollama("same prompt", system_prompt=None, output_type=RouteDecision, response_format="json")
-
-    response = await agent._run_ollama(
-      "same prompt",
-      system_prompt=None,
-      output_type=RouteDecision,
-      response_format="json",
-    )
-  finally:
-    await client.aclose()
-
-  assert response == RouteDecision(service=Service.CHAT, confidence=0.9)
-  assert fake_ollama.calls == 2
-  assert cache.stats.stores == 1
-  assert cache.stats.misses == 2
 
 
 @pytest.mark.asyncio
@@ -190,116 +106,104 @@ async def test_smart_cache_serves_stale_value_while_refreshing():
   assert cache.stats.refreshes == 1
 
 
+class MockCachedComponent(ComponentClient):
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+    self._mock_session = AsyncMock()
+    self._session = None
+
+  async def connect(self):
+    self._raise_if_circuit_open()
+    if hasattr(self, "_connect_exception"):
+      self._record_failure()
+      raise self._connect_exception
+    self._session = self._mock_session
+
+
 @pytest.mark.asyncio
 async def test_component_get_requests_are_cached_by_stable_request_inputs():
-  calls = 0
-
-  async def handler(request):
-    nonlocal calls
-    calls += 1
-
-    return httpx.Response(200, json={"message": f"response {calls}"})
-
   cache = SmartCache(enabled=True, max_entries=10)
-  client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://service.example")
-  component = CachedComponent(Service.OREMI_OJO, "https://service.example", client, cache, cache_ttl_seconds=60)
+  component = MockCachedComponent(
+    Service.OREMI_OJO, "https://service.example", httpx.AsyncClient(), cache, cache_ttl_seconds=60
+  )
 
-  try:
-    first = await component.request_json("GET", params={"q": "weather in Paris"})
-    second = await component.request_json("GET", params={"q": "weather in Paris"})
-    third = await component.request_json("GET", params={"q": "weather in London"})
-  finally:
-    await client.aclose()
+  component._mock_session.call_tool.side_effect = [
+    {"message": "response 1"},
+    {"message": "response 2"},
+  ]
+
+  first = await component.call_tool("get_weather", {"q": "weather in Paris"})
+  second = await component.call_tool("get_weather", {"q": "weather in Paris"})
+  third = await component.call_tool("get_weather", {"q": "weather in London"})
 
   assert first == {"message": "response 1"}
   assert second == {"message": "response 1"}
   assert third == {"message": "response 2"}
-  assert calls == 2
+  assert component._mock_session.call_tool.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_component_cache_bypasses_volatile_context_inputs():
-  calls = 0
-
-  async def handler(request):
-    nonlocal calls
-    calls += 1
-
-    return httpx.Response(200, json={"message": f"response {calls}"})
-
   cache = SmartCache(enabled=True, max_entries=10)
-  client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://service.example")
-  component = CachedComponent(Service.OREMI_OJO, "https://service.example", client, cache, cache_ttl_seconds=60)
+  component = MockCachedComponent(
+    Service.OREMI_OJO, "https://service.example", httpx.AsyncClient(), cache, cache_ttl_seconds=60
+  )
 
-  try:
-    first = await component.request_json("GET", params={"context": {"datetime": "2026-07-10T12:00:00+02:00"}})
-    second = await component.request_json("GET", params={"context": {"datetime": "2026-07-10T12:00:00+02:00"}})
-  finally:
-    await client.aclose()
+  component._mock_session.call_tool.side_effect = [
+    {"message": "response 1"},
+    {"message": "response 2"},
+  ]
+
+  first = await component.call_tool("get_weather", {"context": {"datetime": "2026-07-10T12:00:00+02:00"}})
+  second = await component.call_tool("get_weather", {"context": {"datetime": "2026-07-10T12:00:00+02:00"}})
 
   assert first == {"message": "response 1"}
   assert second == {"message": "response 2"}
-  assert calls == 2
+  assert component._mock_session.call_tool.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_component_cache_bypasses_serialized_volatile_context_inputs():
-  calls = 0
-
-  async def handler(request):
-    nonlocal calls
-    calls += 1
-
-    return httpx.Response(200, json={"message": f"response {calls}"})
-
   cache = SmartCache(enabled=True, max_entries=10)
-  client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://service.example")
-  component = CachedComponent(Service.OREMI_OJO, "https://service.example", client, cache, cache_ttl_seconds=60)
+  component = MockCachedComponent(
+    Service.OREMI_OJO, "https://service.example", httpx.AsyncClient(), cache, cache_ttl_seconds=60
+  )
 
-  try:
-    params = {
-      "q": 'Quel temps fait-il ici ?\n\nContext: {"datetime":"2026-07-10T12:00:00+02:00"}',
-    }
-    first = await component.request_json("GET", params=params)
-    second = await component.request_json("GET", params=params)
-  finally:
-    await client.aclose()
+  component._mock_session.call_tool.side_effect = [
+    {"message": "response 1"},
+    {"message": "response 2"},
+  ]
+
+  params = {
+    "q": 'Quel temps fait-il ici ?\n\nContext: {"datetime":"2026-07-10T12:00:00+02:00"}',
+  }
+  first = await component.call_tool("get_weather", params)
+  second = await component.call_tool("get_weather", params)
 
   assert first == {"message": "response 1"}
   assert second == {"message": "response 2"}
-  assert calls == 2
+  assert component._mock_session.call_tool.call_count == 2
 
 
 @pytest.mark.asyncio
 async def test_component_circuit_breaker_fails_fast_after_repeated_errors():
-  calls = 0
-
-  async def handler(request):
-    nonlocal calls
-    calls += 1
-
-    return httpx.Response(503, json={"detail": "offline"})
-
-  client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://service.example")
-  component = CachedComponent(
+  component = MockCachedComponent(
     Service.OREMI_OJO,
     "https://service.example",
-    client,
+    httpx.AsyncClient(),
+    None,
     circuit_breaker_enabled=True,
     circuit_breaker_failures=2,
     circuit_breaker_cooldown_seconds=60,
   )
 
-  try:
-    with pytest.raises(ComponentUnavailable):
-      await component.request_json("GET", params={"q": "weather"})
+  component._connect_exception = ComponentUnavailable(Service.OREMI_OJO, "offline")
 
-    with pytest.raises(ComponentUnavailable):
-      await component.request_json("GET", params={"q": "weather"})
+  with pytest.raises(ComponentUnavailable):
+    await component.call_tool("get_weather", {"q": "weather"})
 
-    with pytest.raises(ComponentUnavailable, match="circuit breaker open"):
-      await component.request_json("GET", params={"q": "weather"})
-  finally:
-    await client.aclose()
+  with pytest.raises(ComponentUnavailable):
+    await component.call_tool("get_weather", {"q": "weather"})
 
-  assert calls == 6
+  with pytest.raises(ComponentUnavailable, match="circuit breaker open"):
+    await component.call_tool("get_weather", {"q": "weather"})

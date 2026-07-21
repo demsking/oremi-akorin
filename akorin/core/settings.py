@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-import os
 from functools import cached_property
 from functools import lru_cache
 from typing import Literal
@@ -23,7 +22,7 @@ from pydantic import HttpUrl
 from pydantic_settings import BaseSettings
 from pydantic_settings import SettingsConfigDict
 
-from .constants import Service
+from akorin.core.service import Service
 
 
 class Settings(BaseSettings):
@@ -48,7 +47,7 @@ class Settings(BaseSettings):
     default=5020,
     ge=1,
     le=65535,
-    description="Port number to bind the server to. Must be between 1 and 65535.",
+    description="Port number to bind the server to.",
   )
 
   api_prefix: str = Field(default="/", description="API prefix for all endpoints.")
@@ -110,49 +109,9 @@ class Settings(BaseSettings):
     description="Base URL for the Oremi Kansa service.",
   )
 
-  # MQTT is optional - all settings can be omitted if not using MQTT
-
-  mqtt_broker: str | None = Field(
+  isakoso_url: HttpUrl | None = Field(
     default=None,
-    description="MQTT broker hostname or IP address. If not set, MQTT is disabled.",
-  )
-
-  mqtt_port: int = Field(
-    default=1883,
-    ge=1,
-    le=65535,
-    description="MQTT broker port. Must be between 1 and 65535. Default: 1883.",
-  )
-
-  mqtt_client_id: str | None = Field(
-    default=None,
-    description="MQTT client identifier. If not set, auto-generated from hostname and process ID.",
-  )
-
-  mqtt_username: str | None = Field(
-    default=None,
-    description="MQTT broker username. Optional - only needed if authentication is required.",
-  )
-
-  mqtt_password: str | None = Field(
-    default=None,
-    description="MQTT broker password. Optional - only needed if authentication is required.",
-  )
-
-  mqtt_keepalive: int = Field(
-    default=60,
-    ge=10,
-    description="MQTT keepalive interval in seconds. Must be at least 10. Default: 60.",
-  )
-
-  mqtt_tls_enabled: bool = Field(
-    default=False,
-    description="Enable TLS/SSL for MQTT connection. Default: false.",
-  )
-
-  mqtt_tls_ca_cert: str | None = Field(
-    default=None,
-    description="Path to CA certificate file for MQTT TLS verification.",
+    description="Base URL for the Oremi Isakoso service.",
   )
 
   http_request_timeout: float = Field(
@@ -268,53 +227,6 @@ class Settings(BaseSettings):
 
     return value
 
-  @field_validator("mqtt_broker", mode="before")
-  @classmethod
-  def validate_mqtt_broker(cls, value):
-    """Normalize the MQTT broker to the hostname expected by Paho."""
-    if value and isinstance(value, str):
-      value = value.strip().rstrip("/")
-
-      for scheme in ("mqtt://", "tcp://", "ssl://", "ws://", "wss://"):
-        if value.startswith(scheme):
-          value = value.removeprefix(scheme)
-          break
-
-      if not value or any(character in value for character in "/?#@"):
-        raise ValueError("OREMI_AKORIN_MQTT_BROKER must contain only a hostname or IP address")
-
-    return value
-
-  @field_validator("isinmi_url", "ojo_url", "rediyo_url", "kansa_url")
-  @classmethod
-  def validate_component_base_url(cls, value):
-    if value is not None and (value.path not in {"", "/"} or value.query or value.fragment):
-      raise ValueError("component URL must be a base URL without a path, query, or fragment")
-
-    return value
-
-  @field_validator("mqtt_tls_ca_cert")
-  @classmethod
-  def validate_tls_cert(cls, value):
-    """Validate TLS certificate file exists if provided."""
-    if value and not os.path.isfile(value):
-      raise ValueError(f"MQTT TLS CA certificate file not found: {value}")
-
-    return value
-
-  @property
-  def is_mqtt_enabled(self) -> bool:
-    """Check if MQTT is enabled (broker is configured)."""
-    return bool(self.mqtt_broker)
-
-  @property
-  def mqtt_credentials(self) -> tuple[str, str] | None:
-    """Get MQTT credentials as a tuple if both username and password are set."""
-    if self.mqtt_username and self.mqtt_password:
-      return (self.mqtt_username, self.mqtt_password)
-
-    return None
-
   @property
   def service_urls(self) -> dict[Service, HttpUrl | None]:
     """Get all service URLs as a dictionary."""
@@ -336,7 +248,7 @@ class Settings(BaseSettings):
     return len(self.configured_services) > 0
 
   @cached_property
-  def should_use_native_ollama(self) -> bool:
+  def should_use_ollama(self) -> bool:
     """Return whether the active agent model uses the Ollama backend."""
 
     return self.llm_model.startswith("ollama:")
@@ -344,7 +256,7 @@ class Settings(BaseSettings):
   @cached_property
   def ollama_model_name(self) -> str:
     """Return the Ollama model name without provider prefix."""
-    return self.llm_model.removeprefix("ollama:")  # pylint: disable=no-member
+    return self.llm_model.removeprefix("ollama:")
 
   @cached_property
   def ollama_base_url_string(self) -> str:

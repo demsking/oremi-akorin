@@ -1,7 +1,7 @@
 ## Oremi Akọrin
 
 Oremi Akọrin is the natural-language gateway for the Oremi ecosystem.
-It accepts user requests over HTTP or MQTT, uses a large language model (LLM)
+It accepts user requests over HTTP, uses a large language model (LLM)
 to understand, normalize, and classify them, then intelligently routes each
 request to the appropriate Oremi service. Whether the request concerns weather,
 reminders, podcasts, radio, smart-home devices, or general conversation,
@@ -24,7 +24,7 @@ Project repository: https://gitlab.com/demsking/oremi-akorin
 - schedules, reminders, timers, and alarms through Isinmi;
 - weather forecasts, air quality, pollen, and alerts through the weather service;
 - radio and podcast discovery through Rediyo and Kansa;
-- Zigbee device control through MQTT and Zigbee2MQTT;
+- Zigbee device control through Isakoso;
 - native date/time, calculator, and unit-conversion tools.
 
 ## Deployment
@@ -123,10 +123,10 @@ Create a `compose.yaml` file:
 services:
   akorin:
     image: demsking/oremi-akorin
-    restart: always
+    restart: unless-stopped
     depends_on:
-      - mosquitto
       - ollama
+      - isakoso
       - isinmi
       - ojo
       - rediyo
@@ -135,72 +135,61 @@ services:
       - 5020:5020
     environment:
       OREMI_AKORIN_OLLAMA_BASE_URL: http://ollama:11434
-      OREMI_AKORIN_ISINMI_URL: http://isinmi:7337
-      OREMI_AKORIN_OJO_URL: http://ojo:1777
-      OREMI_AKORIN_REDIYO_URL: http://rediyo:9170
-      OREMI_AKORIN_KANSA_URL: http://kansa:4940
-      OREMI_AKORIN_MQTT_BROKER: mosquitto
-    env_file:
-      - .env
+      OREMI_AKORIN_ISAKOSO_URL: http://isakoso:5089/mcp/
+      OREMI_AKORIN_ISINMI_URL: http://isinmi:5073/mcp/
+      OREMI_AKORIN_OJO_URL: http://ojo:5040/mcp/
+      OREMI_AKORIN_REDIYO_URL: http://rediyo:5076/mcp/
+      OREMI_AKORIN_KANSA_URL: http://kansa:5046/mcp/
+
+  isakoso:
+    image: demsking/oremi-isakoso
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    environment:
+      OREMI_ISAKOSO_MQTT_BROKER: mosquitto
+
+  isinmi:
+    image: demsking/oremi-isinmi
+    restart: unless-stopped
+    environment:
+      OREMI_ISINMI_DATABASE_ENCRYPTION_KEY: ${OREMI_ISINMI_DATABASE_ENCRYPTION_KEY?Missing required environment variable}
+    volumes:
+      - oremi-isinmi-data:/oremi/data
+
+  ojo:
+    image: demsking/oremi-ojo
+    restart: unless-stopped
+
+  rediyo:
+    image: demsking/oremi-rediyo
+    restart: unless-stopped
+
+  kansa:
+    image: demsking/oremi-kansa
+    restart: unless-stopped
+    volumes:
+      - oremi-kansa-data:/oremi/data
 
   mosquitto:
     image: eclipse-mosquitto:2.0.18
-    restart: always
+    restart: unless-stopped
     volumes:
       - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
 
   ollama:
     image: ollama/ollama
-    restart: always
+    restart: unless-stopped
     runtime: nvidia
     volumes:
-      - ~/.ollama:/root/.ollama
+      - ollama-data:/root/.ollama
     environment:
       CUDA_VISIBLE_DEVICES: 0
 
-  isinmi:
-    image: demsking/oremi-isinmi-agent
-    restart: always
-    depends_on:
-      - ollama
-    volumes:
-      - ~/.config/oremi-isinmi-agent:/oremi/data
-    environment:
-      OREMI_ISINMI_OLLAMA_BASE_URL: http://ollama:11434
-      OREMI_ISINMI_DATABASE_ENCRYPTION_KEY: ${OREMI_ISINMI_DATABASE_ENCRYPTION_KEY?Missing required environment variable}
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7337/health/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  ojo:
-    image: demsking/oremi-ojo
-    restart: always
-    depends_on:
-      - ollama
-    environment:
-      OREMI_OJO_OLLAMA_BASE_URL: http://ollama:11434
-
-  rediyo:
-    image: demsking/oremi-rediyo-agent
-    restart: always
-    depends_on:
-      - ollama
-    volumes:
-      - ~/.config/oremi-rediyo-agent:/var/cache/oremi-rediyo-agent
-    environment:
-      OLLAMA_BASEURL: http://ollama:11434
-
-  kansa:
-    image: demsking/oremi-kansa-agent
-    restart: always
-    depends_on:
-      - ollama
-    volumes:
-      - ~/.config/oremi-kansa-agent:/var/cache/oremi-kansa-agent
-    environment:
-      OLLAMA_BASEURL: http://ollama:11434
+volumes:
+  oremi-isinmi-data:
+  oremi-kansa-data:
+  ollama-data:
 ```
 
 Start the services with:
@@ -226,7 +215,7 @@ the environment or a `.env` file in the working directory.
 
 ### Application and Server Settings
 
-- `OREMI_AKORIN_SERVER_HOST`: Optional. Defaults to `127.0.0.1`. Host interface
+- `OREMI_AKORIN_SERVER_HOST`: Optional. Defaults to `0.0.0.0`. Host interface
   used by the Oremi Akọrin server.
 - `OREMI_AKORIN_SERVER_PORT`: Optional. Defaults to `5020`. Port used by the
   Oremi Akọrin server. Valid range: `1` to `65535`.
@@ -327,127 +316,49 @@ disabled.
   forecasts, air quality, pollen, and alert requests.
 - `OREMI_AKORIN_REDIYO_URL`: Base URL of the Oremi Rediyo radio service.
 - `OREMI_AKORIN_KANSA_URL`: Base URL of the Oremi Kansa podcast service.
+- `OREMI_AKORIN_ISAKOSO_URL`: Base URL of the Oremi Isakoso smart-device control service.
 
 ### HTTP Client Settings
 
 - `OREMI_AKORIN_HTTP_REQUEST_TIMEOUT`: Optional. Defaults to `30.0`. Global
   timeout in seconds for HTTP requests sent to external services.
 
-### MQTT Settings
-
-MQTT integration is optional. If `OREMI_AKORIN_MQTT_BROKER` is not configured,
-MQTT support is disabled.
-
-- `OREMI_AKORIN_MQTT_BROKER`: Hostname or IP address of the MQTT broker.
-- `OREMI_AKORIN_MQTT_PORT`: Optional. Defaults to `1883`. MQTT broker port.
-  Valid range: `1` to `65535`.
-- `OREMI_AKORIN_MQTT_CLIENT_ID`: Optional. MQTT client identifier. When omitted,
-  one is generated automatically.
-- `OREMI_AKORIN_MQTT_USERNAME`: Optional. Username for MQTT authentication.
-- `OREMI_AKORIN_MQTT_PASSWORD`: Optional. Password for MQTT authentication.
-- `OREMI_AKORIN_MQTT_KEEPALIVE`: Optional. Defaults to `60`. MQTT keepalive
-  interval in seconds. Minimum value: `10`.
-- `OREMI_AKORIN_MQTT_TLS_ENABLED`: Optional. Defaults to `false`. Enables TLS
-  for the MQTT connection.
-- `OREMI_AKORIN_MQTT_TLS_CA_CERT`: Optional. Path to the CA certificate used to
-  verify the MQTT broker when TLS is enabled.
-
 ### Logging Settings
 
 - `OREMI_AKORIN_LOG_LEVEL`: Optional. Defaults to `INFO`. Logging level:
   `DEBUG`, `INFO`, `WARNING`, `ERROR`, or `CRITICAL`.
-- `OREMI_AKORIN_LOG_FILE`: Optional. Defaults to `oremi_akorin.log`. Path to
-  the rotating application log file.
-
-### Example
-
-```env
-OREMI_AKORIN_SERVER_HOST=127.0.0.1
-OREMI_AKORIN_SERVER_PORT=5020
-OREMI_AKORIN_API_PREFIX=/
-OREMI_AKORIN_LLM_MODEL=ollama:qwen3.5:2b
-OREMI_AKORIN_OLLAMA_BASE_URL=http://ollama:11434
-OREMI_AKORIN_ISINMI_URL=http://oremi-isinmi:7337
-OREMI_AKORIN_OJO_URL=http://oremi-ojo:1777
-OREMI_AKORIN_REDIYO_URL=http://oremi-rediyo:5030
-OREMI_AKORIN_KANSA_URL=http://oremi-kansa:5040
-OREMI_AKORIN_MQTT_BROKER=test.mosquitto.org
-OREMI_AKORIN_LOG_LEVEL=INFO
-```
+- `OREMI_AKORIN_LOG_FILE`: Optional. Defaults to `None`. Path to
+  the rotating application log file. If omitted, logs are written to stdout.
 
 ## Oremi Service Dependencies
 
 Oremi Akọrin can operate as a standalone conversational assistant, but its
 capabilities expand significantly when connected to other Oremi services.
 
-- **Oremi Akọrin** – Alarm, timer, reminder, and calendar management.
+- **Oremi Isinmi** – Alarm, timer, reminder, and calendar management.
   Handles scheduling requests and other time-based personal assistant tasks.
+
   Documentation: https://demsking.gitlab.io/oremi-isinmi-agent
 
-- **Oremi Weather Agent** – Weather forecasts, current conditions, air quality,
+- **Oremi Ojọ** – Weather forecasts, current conditions, air quality,
   pollen information, geocoding, and weather alerts.
+
   Documentation: https://demsking.gitlab.io/oremi-ojo
 
-- **Oremi Rediyo Agent** – Natural-language access to internet radio stations,
+- **Oremi Rediyo** – Search and access to internet radio stations,
   allowing users to search for and play radio streams.
-  Documentation: https://demsking.gitlab.io/oremi-rediyo-agent
 
-- **Oremi Kansa Agent** – Natural-language search and discovery of podcasts,
+  Documentation: https://demsking.gitlab.io/oremi-rediyo
+
+- **Oremi Kànsà** – Search and discovery of podcasts,
   including podcast metadata and episode information.
-  Documentation: https://demsking.gitlab.io/oremi-kansa-agent
 
-- **MQTT Broker** – Optional. Enables Zigbee2MQTT device discovery, cached
-  state updates, and command publishing.
+  Documentation: https://demsking.gitlab.io/oremi-kansa
 
-## Routing and Services
+- **Oremi Isakoso** – Smart-home device integration and Zigbee network control,
+  enabling managing lights, switches, and sensors.
 
-Akọrin spell-checks the request in its original language, selects a service
-using deterministic rules and the configured Pydantic AI model, then dispatches
-the original-language request directly. It does not translate French input to
-English before processing.
-
-Request context can include caller-provided service hints and Oremi Device
-preferences. Akọrin uses the full context only for routing, then forwards a
-service-specific subset to the selected processor. For example, weather receives
-location, timezone, coordinates, and temperature/unit preferences; Isinmi
-receives date and time preferences; Zigbee receives only device or state
-context. Unrelated device preferences such as currency or exact location are not
-sent to components that do not use them.
-
-Oremi Device preference context:
-
-```json
-{
-  "text": "Quel temps fait-il ici ?",
-  "context": {
-    "preferences": {
-      "language": "fr",
-      "location": "Deido, Douala, Cameroun",
-      "timezone": "Africa/Douala",
-      "temperature_unit": "celsius",
-      "preferred_currency": "XAF",
-      "measurement_system": "metric",
-      "distance_unit": "kilometer",
-      "time_format": "24h",
-      "date_format": "DD/MM/YYYY",
-      "first_day_of_week": "monday",
-      "latitude": 4.0637626,
-      "longitude": 9.7151827,
-      "datetime": "2026-07-10T07:36:49.673555+02:00"
-    }
-  }
-}
-```
-
-| Service value | Capability                                      | Availability                          |
-| ------------- | ----------------------------------------------- | ------------------------------------- |
-| `chat`        | General conversation                            | Configured Pydantic AI model          |
-| `tool`        | Live date/time, arithmetic, and unit conversion | Built in; invoked through Pydantic AI |
-| `isinmi`      | Scheduling and reminders                        | Requires `OREMI_AKORIN_ISINMI_URL`    |
-| `ojo`         | Forecasts, air quality, pollen, and alerts      | Requires `OREMI_AKORIN_OJO_URL`       |
-| `rediyo`      | Radio                                           | Requires `OREMI_AKORIN_REDIYO_URL`    |
-| `kansa`       | Podcasts                                        | Requires `OREMI_AKORIN_KANSA_URL`     |
-| `zigbee`      | Smart-device control                            | Requires MQTT and Zigbee2MQTT         |
+  Documentation: https://demsking.gitlab.io/oremi-isakoso
 
 ### Native tools
 
@@ -456,40 +367,14 @@ The chat model can call these built-in tools:
 - `get_current_datetime`: current date and time in an IANA timezone;
 - `calculate`: guarded arithmetic with parentheses, `+`, `-`, `*`, `/`, `//`,
   `%`, `**`, `pi`, `e`, and `tau`;
-- `convert_units`: common length, mass, temperature, volume, and speed units.
+- `convert_units`: common length, mass, temperature, volume, and speed units;
+- `list_resources`: lists all available resources (such as device lists or statuses) exposed by the connected MCP servers;
+- `read_resource`: reads the content of a specific resource using its URI;
+- `list_prompts`: lists all available prompt templates/predefined messages from connected MCP servers;
+- `get_prompt`: renders a specific prompt template by name, optionally taking input arguments.
 
 Examples include "What is `(18 * 4) + 7`?", "Convert 5 kilometers to miles",
-and "What time is it in Lagos?".
-
-## Zigbee2MQTT
-
-When MQTT connects, Akọrin subscribes to
-`zigbee2mqtt/bridge/devices`, discovers non-coordinator devices, and resolves
-commands against their friendly names. Commands are published to
-`zigbee2mqtt/<friendly-name>/set`.
-
-Natural-language command:
-
-```json
-{
-  "text": "Turn off the bedroom lamp"
-}
-```
-
-Explicit command context:
-
-```json
-{
-  "text": "Set the device state",
-  "context": {
-    "device": "bedroom_lamp",
-    "state": "OFF"
-  }
-}
-```
-
-`state` may also be an object supported by the target Zigbee2MQTT device, for
-example `{"state":"ON","brightness":128}`.
+"What time is it in Lagos?", "List all available resources", or "Get the summarize prompt".
 
 ## Docker
 
@@ -529,15 +414,15 @@ deploy it behind a trusted proxy and network boundary.
 
 Akọrin does not provide application-level authentication. Protect remote
 deployments with the proxy, firewall rules, or another authentication layer,
-especially when MQTT or smart-device control is enabled.
+especially when smart-device control is enabled.
 
 ## Troubleshooting
 
 ### Configuration error at startup
 
 When using an `ollama:` model, confirm that `OREMI_AKORIN_OLLAMA_BASE_URL`
-is set and includes `http://` or `https://`. Component settings must be base
-URLs, for example `http://ojo:1777`, without `/api` paths.
+is set and includes `http://` or `https://`. Component settings must target the
+MCP streamable HTTP endpoint, for example `http://ojo:5040/mcp`.
 
 ### A configured component prevents startup
 
@@ -554,13 +439,6 @@ so verify that the model is installed:
 ```bash
 ollama list
 ```
-
-### MQTT or Zigbee is unavailable
-
-Set `OREMI_AKORIN_MQTT_BROKER` to a broker hostname rather than an HTTP URL.
-Check broker credentials, TLS settings, and the `mqtt` field from `/health`.
-Zigbee device discovery additionally requires Zigbee2MQTT to publish its bridge
-device list.
 
 ### More diagnostic output
 

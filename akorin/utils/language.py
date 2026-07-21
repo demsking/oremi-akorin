@@ -12,30 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ..core.constants import Language
+import py3langid as langid  # pyright: ignore
 
-FRENCH_MARKERS = {
-  "avec",
-  "bonjour",
-  "comment",
-  "demain",
-  "météo",
-  "pourquoi",
-  "pour",
-  "quel",
-  "quelle",
-  "simplement",
-  "rappelle",
-  "recherche",
-  "trouve",
-  "une",
-}
+Language = str
 
 
 def detect_language(text: str) -> Language:
-  words = {word.strip(".,!?;:'\"").lower() for word in text.split()}
+  language, _probability = langid.classify(text)
 
-  if words & FRENCH_MARKERS or any(char in text.lower() for char in "àâçéèêëîïôùûü"):
-    return Language.FR
-
-  return Language.EN
+  return language

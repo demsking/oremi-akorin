@@ -3,7 +3,7 @@
 [![Buy me a beer](https://img.shields.io/badge/Buy%20me-a%20beer-1f425f.svg)](https://www.buymeacoffee.com/demsking)
 
 Oremi Akọrin is the natural-language gateway for the Oremi ecosystem.
-It accepts user requests over HTTP or MQTT, uses a large language model (LLM)
+It accepts user requests over HTTP, uses a large language model (LLM)
 to understand, normalize, and classify them, then intelligently routes each
 request to the appropriate Oremi service. Whether the request concerns weather,
 reminders, podcasts, radio, smart-home devices, or general conversation,
@@ -25,7 +25,7 @@ https://demsking.gitlab.io/oremi-akorin/
 
 ## Development
 
-Oremi Device is built with Python and uses `uv` for dependency management. The
+Oremi Akọrin is built with Python and uses `uv` for dependency management. The
 project follows standard Python development practices with type hints, linting,
 and automated testing.
 

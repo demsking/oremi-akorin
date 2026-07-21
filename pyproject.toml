@@ -1,7 +1,7 @@
 [project]
 name = "oremi-akorin"
 version = "1.0.0b11"
-description = "Natural-language gateway for the Oremi ecosystem, routing HTTP and MQTT requests to the appropriate AI-powered services."
+description = "Natural-language gateway for the Oremi ecosystem, routing HTTP requests to the appropriate AI-powered services."
 authors = [{ name = "Sébastien Demanou", email = "demsking@gmail.com" }]
 maintainers = [{ name = "Sébastien Demanou", email = "demsking@gmail.com" }]
 license = { text = "Apache-2.0" }
@@ -13,8 +13,6 @@ keywords = ["oremi"]
 classifiers = [
   "Environment :: Console",
   "Intended Audience :: Developers",
-  "Natural Language :: English",
-  "Natural Language :: French",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "Programming Language :: Python :: 3.12",
 ]
@@ -22,19 +20,20 @@ classifiers = [
 dependencies = [
   "fastapi[standard]>=0.115.0,<1.0.0",
   "uvicorn>=0.34.0,<1.0.0",
-  "paho-mqtt>=2.1.0,<3.0.0",
   "pydantic>=2.10.0,<3.0.0",
   "httpx>=0.28.1",
   "pydantic-settings>=2.14.2",
   "pydantic-ai>=2.5.0",
   "ollama>=0.6.2",
+  "mcp>=1.28.1",
+  "py3langid>=0.3.0",
 ]
 
 [project.urls]
 "Say Thanks!" = "https://www.buymeacoffee.com/demsking"
+"Documentation" = "https://demsking.gitlab.io/oremi-akorin"
 "Source" = "https://gitlab.com/demsking/oremi-akorin"
 "Tracker" = "https://gitlab.com/demsking/oremi-akorin/-/issues"
-"Documentation" = "https://gitlab.com/demsking/oremi-akorin/-/blob/main/README.md"
 
 [project.scripts]
 oremi-akorin = "akorin.__main__:start"
@@ -42,7 +41,7 @@ oremi-akorin = "akorin.__main__:start"
 [dependency-groups]
 dev = [
   "httpx>=0.28.0",
-  "pytest>=8.4.0",
+  "pytest>=9.1.1",
   "pytest-asyncio>=1.0.0",
   "ruff>=0.12.0",
   "sounddevice>=0.5.5",

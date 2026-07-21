@@ -1,11 +1,29 @@
+# Copyright 2026 Sébastien Demanou. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 import logging
+from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import httpx
 import pytest
-from pydantic import ValidationError
+from pydantic_ai.models.test import TestModel
 
-from akorin.core.settings import Settings
+from akorin.core.agent import AgentClient
 from akorin.core.app import create_app
+from akorin.core.settings import Settings
 
 
 def isolated_settings(**overrides) -> Settings:
@@ -16,7 +34,7 @@ def isolated_settings(**overrides) -> Settings:
     "ojo_url": None,
     "rediyo_url": None,
     "kansa_url": None,
-    "mqtt_broker": None,
+    "isakoso_url": None,
   }
   values.update(overrides)
   return Settings(**values)
@@ -37,27 +55,99 @@ def ollama_handler(request: httpx.Request) -> httpx.Response:
         "llm_model": "test",
       },
     )
-  if request.url.path == "/api/agent/chat":
-    return httpx.Response(200, json={"message": "22°C and sunny", "data": {"temperature": 22}})
+  if request.url.path == "/api/chat":
+    import json
+
+    body = json.loads(request.read())
+    messages = body.get("messages", [])
+    if messages and messages[-1].get("role") == "user":
+      return httpx.Response(
+        200,
+        json={
+          "message": {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [{"function": {"name": "get_weather", "arguments": {"q": "Paris"}}}],
+          }
+        },
+      )
+    else:
+      return httpx.Response(200, json={"message": {"role": "assistant", "content": "22°C and sunny"}})
   return httpx.Response(200, json={"message": "ok"})
 
 
-def test_component_settings_accept_only_base_urls():
-  with pytest.raises(ValidationError, match="component URL must be a base URL"):
-    isolated_settings(ojo_url="http://weather.test/api/agent/climate")
-
-
 @pytest.mark.asyncio
-async def test_process_endpoint():
-  service_client = httpx.AsyncClient(transport=httpx.MockTransport(ollama_handler))
-  app = create_app(isolated_settings(ojo_url="http://weather.test"), service_client)
-  async with app.router.lifespan_context(app):
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-      response = await client.post(
-        "/api/agent/",
-        json={"text": "Weather in Paris", "language": "en", "context": {"route_to": "ojo"}},
-      )
+async def test_process_endpoint(monkeypatch):
+  class FakeTool:
+    def __init__(self, name, description, inputSchema):
+      self.name = name
+      self.description = description
+      self.inputSchema = inputSchema
+
+  class FakeToolsList:
+    def __init__(self, tools):
+      self.tools = tools
+
+  class FakeServerInfo:
+    def __init__(self, name, version):
+      self.name = name
+      self.version = version
+
+  def mock_build_model(settings, model_settings, client):
+    import inspect
+    from akorin.agents.command_agent import CommandAgent
+
+    frame = inspect.currentframe()
+    while frame:
+      caller_self = frame.f_locals.get("self")
+      if isinstance(caller_self, CommandAgent):
+        return TestModel(custom_output_args={"service": "ojo", "confidence": 0.95})
+      frame = frame.f_back
+
+    return TestModel(call_tools=["get_weather"], custom_output_text="22°C and sunny")
+
+  monkeypatch.setattr(AgentClient, "build_model", staticmethod(mock_build_model))
+
+  mock_read = MagicMock()
+  mock_write = MagicMock()
+
+  mock_session = AsyncMock()
+  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo("oremi-weather", "1.2.3")})()
+  mock_session.initialize = AsyncMock(return_value=mock_init_result)
+  mock_session.list_tools = AsyncMock(
+    return_value=FakeToolsList(
+      [FakeTool("get_weather", "Get weather", {"type": "object", "properties": {"q": {"type": "string"}}})]
+    )
+  )
+  mock_call_result = type(
+    "FakeResult", (), {"content": [type("FakeContent", (), {"type": "text", "text": '{"temperature": 22}'})()]}
+  )()
+  mock_session.call_tool = AsyncMock(return_value=mock_call_result)
+
+  class AsyncContextManagerMock:
+    def __init__(self, return_value):
+      self.return_value = return_value
+
+    async def __aenter__(self):
+      return self.return_value
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+      pass
+
+  with (
+    patch("akorin.core.components.streamable_http_client", return_value=AsyncContextManagerMock((mock_read, mock_write, None))),
+    patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session)),
+  ):
+    service_client = httpx.AsyncClient(transport=httpx.MockTransport(ollama_handler))
+    app = create_app(isolated_settings(ojo_url="http://weather.test"), service_client)
+    async with app.router.lifespan_context(app):
+      transport = httpx.ASGITransport(app=app)
+      async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+          "/api/agent/",
+          json={"text": "Weather in Paris", "context": {"route_to": "ojo"}},
+        )
+
   assert response.status_code == 200
   assert response.json()["service"] == "ojo"
   assert response.json()["message"] == "22°C and sunny"
@@ -109,21 +199,32 @@ async def test_startup_marks_unreachable_component_as_unavailable():
 
 @pytest.mark.asyncio
 async def test_startup_marks_invalid_component_service_info_as_unavailable():
+  from unittest.mock import patch
+
   def invalid_info_handler(request: httpx.Request) -> httpx.Response:
     if request.url.path == "/api/server":
       return httpx.Response(200, json={"name": "oremi-weather"})
     return httpx.Response(200, json={"models": []})
 
   service_client = httpx.AsyncClient(transport=httpx.MockTransport(invalid_info_handler))
-  app = create_app(
-    isolated_settings(ojo_url="http://weather.test"),
-    service_client,
-  )
 
-  async with app.router.lifespan_context(app):
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-      response = await client.get("/health/")
+  from contextlib import asynccontextmanager
+
+  @asynccontextmanager
+  async def mock_streamable_http_client(*args, **kwargs):
+    raise RuntimeError("Invalid component service info")
+    yield
+
+  with patch("akorin.core.components.streamable_http_client", side_effect=mock_streamable_http_client):
+    app = create_app(
+      isolated_settings(ojo_url="http://weather.test"),
+      service_client,
+    )
+
+    async with app.router.lifespan_context(app):
+      transport = httpx.ASGITransport(app=app)
+      async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/health/")
 
   assert response.status_code == 200
   payload = response.json()

@@ -20,13 +20,13 @@ import httpx
 import ollama
 from ollama import ResponseError
 
-from ..core.settings import Settings
+from akorin.core.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
 async def load_ollama_model(settings: Settings) -> None:
-  if not settings.should_use_native_ollama:
+  if not settings.should_use_ollama:
     return
 
   client = ollama.AsyncClient(host=settings.ollama_base_url_string)

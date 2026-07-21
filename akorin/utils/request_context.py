@@ -13,20 +13,12 @@
 # limitations under the License.
 # ==============================================================================
 import json
-from typing import Any
+
+from akorin.core.request import ProcessRequestContext
 
 
-def request_context(context: dict[str, Any]) -> str | None:
+def request_context(context: ProcessRequestContext) -> str | None:
   if not context:
     return None
 
   return json.dumps(context, default=str, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-
-
-def contextualized_text(text: str, context: dict[str, Any]) -> str:
-  serialized_context = request_context(context)
-
-  if serialized_context is None:
-    return text
-
-  return f"{text}\n\nContext: {serialized_context}"

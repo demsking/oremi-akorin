@@ -14,17 +14,12 @@
 # ==============================================================================
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel
 from pydantic import Field
-from pydantic_ai import Agent
 from pydantic_ai import ModelSettings
-from pydantic_ai.capabilities import Thinking
 
-from ...core.constants import Service
-from ...services.router import rule_route
-from ..agent import AgentClient
+from akorin.core.agent import AgentClient
+from akorin.core.service import Service
 
 
 SYSTEM_PROMPT = (
@@ -33,23 +28,23 @@ SYSTEM_PROMPT = (
   '{"service":"<service>","confidence":<0-1>}\n\n'
   "Valid services:\n"
   "- isinmi: reminders, alarms, timers, calendar, scheduling.\n"
-  "- weather: current or future weather, forecast, temperature, air quality, pollen, alerts, or warnings for a place.\n"
+  "- ojo: current or future weather, forecast, temperature, air quality, pollen, alerts, or warnings for a place.\n"
   "- rediyo: radio stations.\n"
   "- kansa: podcasts.\n"
-  "- zigbee: smart home and Zigbee devices, including lights, lamps, switches, plugs, thermostats, blinds, shutters, "
+  "- isakoso: smart home and Zigbee devices, including lights, lamps, switches, plugs, thermostats, blinds, shutters, "
   "locks, and commands such as turn on, turn off, allume, éteins, ouvre, ferme, active, désactive.\n"
   "- chat: everything else, including current time, current date, or current day.\n\n"
   "Examples:\n"
-  '- {"text":"What\'s the weather like in Lagos?"} -> {"service":"weather","confidence":0.95}\n'
-  '- {"text":"Quel temps fait-il à Paris ?"} -> {"service":"weather","confidence":0.95}\n'
-  '- {"text":"Are pollen levels high in Lyon today?"} -> {"service":"weather","confidence":0.95}\n'
-  '- {"text":"Est-ce qu\'il y a du pollen à Lyon en ce moment ?"} -> {"service":"weather","confidence":0.95}\n'
-  '- {"text":"Turn on the living room lights and set brightness to 80%"} -> {"service":"zigbee","confidence":0.98}\n'
-  '- {"text":"Allume les lumières du salon et mets la luminosité à 80%"} -> {"service":"zigbee","confidence":0.98}\n'
-  '- {"text":"Allume la lumière de la chambre"} -> {"service":"zigbee","confidence":0.98}\n'
-  '- {"text":"Éteins la lampe du salon"} -> {"service":"zigbee","confidence":0.98}\n'
-  '- {"text":"Éteins la lumière de la chambre"} -> {"service":"zigbee","confidence":0.98}\n'
-  '- {"text":"Turn on the bedroom light"} -> {"service":"zigbee","confidence":0.98}\n'
+  '- {"text":"What\'s the weather like in Lagos?"} -> {"service":"ojo","confidence":0.95}\n'
+  '- {"text":"Quel temps fait-il à Paris ?"} -> {"service":"ojo","confidence":0.95}\n'
+  '- {"text":"Are pollen levels high in Lyon today?"} -> {"service":"ojo","confidence":0.95}\n'
+  '- {"text":"Est-ce qu\'il y a du pollen à Lyon en ce moment ?"} -> {"service":"ojo","confidence":0.95}\n'
+  '- {"text":"Turn on the living room lights and set brightness to 80%"} -> {"service":"isakoso","confidence":0.98}\n'
+  '- {"text":"Allume les lumières du salon et mets la luminosité à 80%"} -> {"service":"isakoso","confidence":0.98}\n'
+  '- {"text":"Allume la lumière de la chambre"} -> {"service":"isakoso","confidence":0.98}\n'
+  '- {"text":"Éteins la lampe du salon"} -> {"service":"isakoso","confidence":0.98}\n'
+  '- {"text":"Éteins la lumière de la chambre"} -> {"service":"isakoso","confidence":0.98}\n'
+  '- {"text":"Turn on the bedroom light"} -> {"service":"isakoso","confidence":0.98}\n'
   '- {"text":"Can you explain why the sky is blue like I\'m five?"} -> {"service":"chat","confidence":0.96}\n'
   '- {"text":"Pourquoi le ciel est bleu ? Explique-moi simplement."} -> {"service":"chat","confidence":0.96}\n'
   '- {"text":"Why is the sky blue?"} -> {"service":"chat","confidence":0.96}\n'
@@ -72,9 +67,11 @@ class RouteDecision(BaseModel):
 
 
 class CommandAgent(AgentClient[RouteDecision]):
-  command_model_settings: ModelSettings
+  SYSTEM_PROMPT = SYSTEM_PROMPT
+  RESULT_TYPE = RouteDecision
+  RESPONSE_FORMAT = "json"
 
-  def _command_model_settings(self) -> ModelSettings:
+  def _get_model_settings(self) -> ModelSettings:
     return ModelSettings(
       temperature=0,
       max_tokens=80,
@@ -83,30 +80,5 @@ class CommandAgent(AgentClient[RouteDecision]):
       thinking=False,
     )
 
-  def _create_agent(self) -> Any:
-    self.command_model_settings = self._command_model_settings()
-
-    return Agent(
-      model=self.model,
-      system_prompt=SYSTEM_PROMPT,
-      output_type=RouteDecision,
-      model_settings=self.command_model_settings,
-      capabilities=[Thinking(effort=False)],
-    )
-
   async def classify(self, message: str) -> RouteDecision:
-    match = rule_route(message)
-
-    if match is not None:
-      return RouteDecision(service=match.service, confidence=match.confidence)
-
-    if self.uses_native_ollama:
-      return await self._run_ollama(
-        message,
-        system_prompt=SYSTEM_PROMPT,
-        model_settings=getattr(self, "command_model_settings", self._command_model_settings()),
-        output_type=RouteDecision,
-        response_format="json",
-      )
-
     return await self._run(message)

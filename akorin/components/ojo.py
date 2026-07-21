@@ -12,11 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ..core.oremi import OremiServerHealth
-from .base import ComponentClient
+from akorin.core.components import ComponentClient
 
 
 class OjoClient(ComponentClient):
-  endpoint_path = "/api/agent/chat"
-  server_path = "/health/"
-  server_info_model = OremiServerHealth
+  pass

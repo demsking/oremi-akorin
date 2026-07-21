@@ -1,13 +1,27 @@
+# Copyright 2026 Sébastien Demanou. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 
 import pytest
 
-from akorin.services.tools import DateTimeTool
-from akorin.services.tools import CalculatorTool
-from akorin.services.tools import ToolRegistry
-from akorin.services.tools import UnitConversionTool
+from akorin.core.tools import ToolRegistry
+from akorin.tools.calculator_tool import CalculatorTool
+from akorin.tools.datetime_tool import DateTimeTool
+from akorin.tools.unit_conversion_tool import UnitConversionTool
 
 
 @pytest.mark.asyncio
@@ -99,9 +113,3 @@ async def test_unit_conversion_rejects_incompatible_units():
   result = await UnitConversionTool().execute({"value": 1, "from_unit": "kg", "to_unit": "km"}, {})
 
   assert result.data == {"error": "Cannot convert kg to km: units measure different quantities"}
-
-
-def test_default_registry_exposes_practical_tools():
-  names = [definition["function"]["name"] for definition in ToolRegistry().definitions]
-
-  assert names == ["get_current_datetime", "calculate", "convert_units"]

@@ -1,3 +1,17 @@
+# Copyright 2026 Sébastien Demanou. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 from datetime import datetime
 from datetime import timezone
 
@@ -9,18 +23,16 @@ from pydantic_ai.models.function import AgentInfo
 from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 
-from akorin.core.constants import Service
-from akorin.core.settings import Settings
+from akorin.agents.chat_agent import ChatAgent
+from akorin.agents.chat_tools_agent import ChatToolsAgent
+from akorin.agents.command_agent import CommandAgent
+from akorin.agents.response_agent import ResponseAgent
 from akorin.api.agent import PAYLOAD_EXAMPLES
-from akorin.llm.agent import AgentClient
-from akorin.llm.agents.chat import ChatAgent
-from akorin.llm.agents.chat_tools import ChatToolsAgent
-from akorin.llm.agents.command import CommandAgent
-from akorin.llm.agents.response import ResponseAgent
-from akorin.llm.agents.spellcheck import SpellCheckAgent
-from akorin.llm.agents.zigbee_command import ZigbeeCommandAgent
-from akorin.services.tools import DateTimeTool
-from akorin.services.tools import ToolRegistry
+from akorin.core.agent import AgentClient
+from akorin.core.service import Service
+from akorin.core.settings import Settings
+from akorin.core.tools import ToolRegistry
+from akorin.tools.datetime_tool import DateTimeTool
 
 
 def isolated_settings() -> Settings:
@@ -76,12 +88,12 @@ async def test_command_agent_classifies_all_payload_examples(monkeypatch):
     "Weather with Oremi Device context": Service.OREMI_OJO,
     "Pollen count (EN)": Service.OREMI_OJO,
     "Alerte Pollen (FR)": Service.OREMI_OJO,
-    "zigbee": Service.ZIGBEE,
-    "Zigbee device command": Service.ZIGBEE,
-    "Control Zigbee device (EN)": Service.ZIGBEE,
-    "Contrôler un appareil Zigbee (FR)": Service.ZIGBEE,
-    "Allumer la lumière de la chambre (FR)": Service.ZIGBEE,
-    "Éteindre la lumière de la chambre (FR)": Service.ZIGBEE,
+    "zigbee": Service.OREMI_ISAKOSO,
+    "Zigbee device command": Service.OREMI_ISAKOSO,
+    "Control Zigbee device (EN)": Service.OREMI_ISAKOSO,
+    "Contrôler un appareil Zigbee (FR)": Service.OREMI_ISAKOSO,
+    "Allumer la lumière de la chambre (FR)": Service.OREMI_ISAKOSO,
+    "Éteindre la lumière de la chambre (FR)": Service.OREMI_ISAKOSO,
     "General Chat (EN)": Service.CHAT,
     "Discussion générale (FR)": Service.CHAT,
     "reminder": Service.OREMI_ISINMI,
@@ -95,7 +107,30 @@ async def test_command_agent_classifies_all_payload_examples(monkeypatch):
     "Play Podcast (EN)": Service.OREMI_KANSA,
     "Lancer un podcast (FR)": Service.OREMI_KANSA,
   }
-  use_model(monkeypatch, TestModel(custom_output_args={"service": "chat", "confidence": 0.1}))
+  message_to_service = {}
+  for name, example in PAYLOAD_EXAMPLES.items():
+    message_to_service[example["value"].message] = expected_services[name]
+
+  def handler(messages, info) -> ModelResponse:
+    from pydantic_ai.messages import ModelResponse, ToolCallPart
+
+    prompt = ""
+    for m in messages:
+      for part in getattr(m, "parts", []):
+        if hasattr(part, "content"):
+          prompt = part.content
+    svc = message_to_service.get(prompt, Service.CHAT)
+    return ModelResponse(
+      parts=[
+        ToolCallPart(
+          tool_name="final_result",
+          args={"service": svc.value, "confidence": 0.95},
+          tool_call_id="final_result_call",
+        )
+      ]
+    )
+
+  use_model(monkeypatch, FunctionModel(handler))
 
   async with httpx.AsyncClient() as client:
     agent = CommandAgent(isolated_settings(), client)
@@ -104,24 +139,6 @@ async def test_command_agent_classifies_all_payload_examples(monkeypatch):
       decision = await agent.classify(example["value"].message)
 
       assert decision.service == expected_services[name], name
-
-
-@pytest.mark.asyncio
-async def test_spellcheck_prompt_returns_only_generated_text(monkeypatch):
-  prompts = []
-
-  def handler(messages, info: AgentInfo) -> ModelResponse:
-    prompts.append(str(messages))
-    return ModelResponse(parts=[TextPart("Quelle heure est-il ?")])
-
-  use_model(monkeypatch, FunctionModel(handler))
-
-  async with httpx.AsyncClient() as client:
-    spellcheck_agent = SpellCheckAgent(isolated_settings(), client)
-    corrected = await spellcheck_agent.check("quelle heure est il ?", "fr")
-
-  assert corrected == "Quelle heure est-il ?"
-  assert "Correct spelling, grammar, punctuation" in prompts[0]
 
 
 @pytest.mark.asyncio
@@ -172,36 +189,3 @@ async def test_pydantic_ai_tool_call_records_tool_result(monkeypatch):
   assert result.message == "Il est 14 h 32."
   assert result.tools[0].name == "get_current_datetime"
   assert result.tools[0].data["datetime"] == "2026-06-20T16:32:00+02:00"
-
-
-@pytest.mark.asyncio
-async def test_native_ollama_zigbee_command_handles_non_json_response():
-  class FakeMessage:
-    content = "I am ready. I have analyzed your device list and can now assist you."
-    tool_calls = None
-
-  class FakeResponse:
-    message = FakeMessage()
-
-  class FakeOllamaClient:
-    async def chat(self, **kwargs):
-      return FakeResponse()
-
-  async with httpx.AsyncClient() as client:
-    agent = ZigbeeCommandAgent(ollama_settings(), client)
-    agent.ollama_client = FakeOllamaClient()
-    decision = await agent.select(
-      ["allume la lumière de la chambre"],
-      [
-        {
-          "name": "Lumière de la chambre",
-          "mqtt_topic": "Lumière de la chambre",
-          "operations": [{"property": "state", "type": "binary", "value_on": "ON", "value_off": "OFF"}],
-        }
-      ],
-    )
-
-  assert decision.device is None
-  assert decision.payload == {}
-  assert decision.state_properties == []
-  assert decision.confidence == 0

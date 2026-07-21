@@ -12,22 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from dataclasses import dataclass
-from typing import Dict
+from fastapi import FastAPI
+from fastapi import Request
 
-from ..components.base import ComponentClient
-from ..services.orchestrator import Orchestrator
-from .models import Service
-from .mqtt import MQTTService
-from .settings import Settings
+from akorin.core.components import ComponentsRegistry
+from akorin.core.components import ComponentsStatuses
+from akorin.core.orchestrator import Orchestrator
+from akorin.core.settings import Settings
 
 
-@dataclass(kw_only=True)
-class AppContext:
-  """Application context holding all shared services and components."""
+def set_app_context_settings(app: FastAPI, value: Settings) -> None:
+  app.state.settings = value
 
-  settings: Settings
-  components: Dict[Service, ComponentClient]
-  component_statuses: Dict[Service, bool]
-  orchestrator: Orchestrator
-  mqtt: MQTTService
+
+def get_app_context_settings(request: Request) -> Settings:
+  return request.app.state.settings
+
+
+def set_app_context_components_registry(app: FastAPI, value: ComponentsRegistry) -> None:
+  app.state.components = value
+
+
+def get_app_context_components_registry(request: Request) -> ComponentsRegistry:
+  return request.app.state.components
+
+
+def set_app_context_components_statuses(app: FastAPI, value: ComponentsStatuses) -> None:
+  app.state.component_statuses = value
+
+
+def get_app_context_components_statuses(request: Request) -> ComponentsStatuses:
+  return request.app.state.component_statuses
+
+
+def set_app_context_orchestrator(app: FastAPI, value: Orchestrator) -> None:
+  app.state.orchestrator = value
+
+
+def get_app_context_orchestrator(request: Request) -> Orchestrator:
+  return request.app.state.orchestrator

@@ -15,16 +15,8 @@
 import tomllib
 from pathlib import Path
 
-__all__ = [
-  "APP_DESCRIPTION",
-  "APP_NAME",
-  "APP_VERSION",
-  "PROJECT_DIRECTORY",
-  "STATIC_DIR",
-]
-
 PROJECT_DIRECTORY = Path(__file__).resolve().parents[2]
-STATIC_DIR = PROJECT_DIRECTORY / "htdocs"
+HTDOCS_DIR = PROJECT_DIRECTORY / "htdocs"
 
 _pyproject_path = PROJECT_DIRECTORY / "pyproject.toml"
 
@@ -33,6 +25,7 @@ with _pyproject_path.open("rb") as file:
   APP_NAME = package["name"]
   APP_DESCRIPTION = package["description"]
   APP_VERSION = package["version"]
+  APP_DOCUMENTATION_URL = package["urls"]["Documentation"]
 
   del package
   del tomllib

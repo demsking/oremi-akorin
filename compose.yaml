@@ -2,9 +2,49 @@
 name: dev-oremi-akorin
 
 services:
+  isakoso:
+    image: demsking/oremi-isakoso
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+    ports:
+      - 35089:5089
+    environment:
+      OREMI_ISAKOSO_MQTT_BROKER: mosquitto
+
+  isinmi:
+    image: demsking/oremi-isinmi
+    restart: unless-stopped
+    ports:
+      - 35073:5073
+    environment:
+      OREMI_ISINMI_DATABASE_ENCRYPTION_KEY: B0JJTY+h9x1u36hFuD0UqakgN0P//DWk+r+3+nY3JFo=
+    volumes:
+      - ~/.local/share/oremi-isinmi:/oremi/data
+
+  ojo:
+    image: demsking/oremi-ojo
+    restart: unless-stopped
+    ports:
+      - 35040:5040
+
+  rediyo:
+    image: demsking/oremi-rediyo
+    restart: unless-stopped
+    ports:
+      - "35076:5076"
+
+  kansa:
+    image: demsking/oremi-kansa
+    restart: unless-stopped
+    ports:
+      - "35046:5046"
+    volumes:
+      - ~/.local/share/oremi-kansa:/oremi/data
+
   mosquitto:
     image: eclipse-mosquitto:2.0.18
-    restart: always
+    restart: unless-stopped
     ports:
       - 31883:1883
     volumes:
@@ -13,7 +53,7 @@ services:
   ollama:
     tty: true
     image: ollama/ollama
-    restart: always
+    restart: unless-stopped
     runtime: nvidia
     volumes:
       - ~/.ollama:/root/.ollama
@@ -21,56 +61,4 @@ services:
       - 31434:11434
     environment:
       CUDA_VISIBLE_DEVICES: 0
-
-  isinmi:
-    image: demsking/oremi-isinmi-agent
-    restart: always
-    depends_on:
-      - ollama
-    ports:
-      - 37337:7337
-    environment:
-      OREMI_ISINMI_OLLAMA_BASE_URL: http://ollama:11434
-      OREMI_ISINMI_DATABASE_ENCRYPTION_KEY: B0JJTY+h9x1u36hFuD0UqakgN0P//DWk+r+3+nY3JFo=
-    volumes:
-      - ~/.config/oremi-isinmi-agent:/oremi/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7337/health/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  ojo:
-    image: demsking/oremi-ojo
-    restart: always
-    depends_on:
-      - ollama
-    ports:
-      - 31777:1777
-    environment:
-      OREMI_OJO_OLLAMA_BASE_URL: http://ollama:11434
-
-  rediyo:
-    image: demsking/oremi-rediyo-agent
-    restart: always
-    depends_on:
-      - ollama
-    ports:
-      - 39170:9170
-    volumes:
-      - ~/.config/oremi-rediyo-agent:/var/cache/oremi-rediyo-agent
-    environment:
-      OLLAMA_BASEURL: http://ollama:11434
-
-  kansa:
-    image: demsking/oremi-kansa-agent
-    restart: always
-    depends_on:
-      - ollama
-    ports:
-      - 34940:4940
-    volumes:
-      - ~/.config/oremi-kansa-agent:/var/cache/oremi-kansa-agent
-    environment:
-      OLLAMA_BASEURL: http://ollama:11434
 ...

@@ -19,11 +19,12 @@ from fastapi import Request
 from pydantic import BaseModel
 from pydantic import Field
 
-from ..core.constants import Service
-from ..core.context import AppContext
-from ..core.package import APP_NAME
-from ..core.package import APP_VERSION
-from ..core.settings import Settings
+from akorin.core.context import get_app_context_components_registry
+from akorin.core.context import get_app_context_components_statuses
+from akorin.core.context import get_app_context_settings
+from akorin.core.package import APP_NAME
+from akorin.core.package import APP_VERSION
+from akorin.core.service import Service
 
 API_TAG_METADATA = {
   "name": "Server Endpoints",
@@ -41,16 +42,10 @@ class ServerHealth(BaseModel):
   app: str = Field(..., description="Name of the application.")
   version: str = Field(..., description="Version of the application.")
   llm_model: str = Field(..., description="Configured AI model identifier used by the agent.")
-  mqtt: str = Field(
-    description="Health status of the MQTT broker connection. Indicates 'connected', 'disconnected', or error state."
-  )
+
   components: dict[Service, str] = Field(
     description="Health status of individual external service components. Keys are service names, values are status messages."
   )
-
-
-def get_app_settings(request: Request) -> Settings:
-  return request.app.state.settings
 
 
 @router.get(
@@ -77,7 +72,6 @@ def get_app_settings(request: Request) -> Settings:
                 Service.OREMI_REDIYO: "available",
                 Service.OREMI_KANSA: "available",
               },
-              "mqtt": "connected",
             }
           )
         }
@@ -86,14 +80,15 @@ def get_app_settings(request: Request) -> Settings:
   },
 )
 async def health(request: Request) -> ServerHealth:
-  settings = get_app_settings(request)
-  context: AppContext = request.app.state.context
+  settings = get_app_context_settings(request)
+  components_registry = get_app_context_components_registry(request)
+  components_statuses = get_app_context_components_statuses(request)
 
   components = {
-    service: "available" if context.component_statuses.get(service, False) else "unavailable" for service in context.components
+    service: "available" if components_statuses.get(service, False) else "unavailable" for service in components_registry
   }
 
-  healthy = all(context.component_statuses.get(service, False) for service in context.components)
+  healthy = all(components_statuses.get(service, False) for service in components_registry)
 
   return ServerHealth(
     status="ok" if healthy else "degraded",
@@ -101,5 +96,4 @@ async def health(request: Request) -> ServerHealth:
     version=APP_VERSION,
     llm_model=settings.llm_model,
     components=components,
-    mqtt="connected" if context.mqtt.connected else "disconnected",
   )

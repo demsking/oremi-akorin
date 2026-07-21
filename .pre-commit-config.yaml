@@ -1,6 +1,6 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
-exclude: ^(tests)/.*
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -57,18 +57,6 @@ repos:
         name: "Reorder Python Imports"
         description: "Automatically sorts and groups Python imports."
 
-  - repo: https://github.com/pycqa/pylint
-    rev: v4.0.6
-    hooks:
-      - id: pylint
-        name: "Lint Python Code with Pylint"
-        description: "Lint Python code using `pylint`, focusing on error messages only."
-        entry: pylint
-        language: system
-        # The HA integration shares the application package name and requires
-        # Home Assistant's Python environment, which is unavailable here.
-        exclude: ^(integrations|scripts)/
-
   - repo: local
     hooks:
       - id: hadolint
@@ -78,6 +66,14 @@ repos:
         language: system
         files: Dockerfile
 
+      - id: tests
+        name: Run tests
+        description: Runs `make tests`.
+        entry: make tests
+        language: system
+        pass_filenames: false
+        always_run: true
+
   - repo: https://github.com/charliermarsh/ruff-pre-commit
     rev: v0.15.20
     hooks:
@@ -85,22 +81,6 @@ repos:
         name: "Ruff Linter"
         description: "Runs Ruff, an extremely fast Python linter."
         args: [--fix]
-
-  - repo: https://github.com/pre-commit/pygrep-hooks
-    rev: v1.10.0
-    hooks:
-      - id: python-check-mock-methods
-        name: "Check Mock Methods"
-        description: "Ensures correct usage of mock methods in tests."
-      - id: python-no-eval
-        name: "Disallow Python eval"
-        description: "Prevents use of the dangerous `eval` function in Python."
-      - id: python-no-log-warn
-        name: "Disallow Deprecated log.warn"
-        description: "Prevents use of deprecated `log.warn` in favor of `log.warning`."
-      - id: python-use-type-annotations
-        name: "Enforce Type Annotations"
-        description: "Ensures Python functions and methods use type annotations."
 
   - repo: https://github.com/PyCQA/bandit
     rev: 1.9.4

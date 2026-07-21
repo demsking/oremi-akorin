@@ -22,31 +22,35 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
 
-from ..api import agent
-from ..api import docs
-from ..api import health
-from ..components.base import ComponentClient
-from ..components.base import ensure_components_available
-from ..components.base import monitor_unavailable_components
-from ..components.isinmi import IsinmiClient
-from ..components.kansa import KansaClient
-from ..components.ojo import OjoClient
-from ..components.rediyo import RediyoClient
-from ..components.zigbee import ZigbeeComponent
-from ..llm.agents.response import ResponseAgent
-from ..llm.agents.zigbee_command import ZigbeeCommandAgent
-from ..services.orchestrator import Orchestrator
-from ..utils.cache import SmartCache
-from ..utils.logger import configure_logging
-from ..utils.ollama_model import load_ollama_model
-from ..utils.url import safe_url
-from .constants import Service
-from .context import AppContext
-from .mqtt import MQTTService
-from .package import APP_DESCRIPTION
-from .package import APP_NAME
-from .package import APP_VERSION
-from .settings import Settings
+from akorin.api import agent
+from akorin.api import docs
+from akorin.api import health
+from akorin.components.isakoso import IsakosoClient
+from akorin.components.isinmi import IsinmiClient
+from akorin.components.kansa import KansaClient
+from akorin.components.ojo import OjoClient
+from akorin.components.rediyo import RediyoClient
+from akorin.core.components import ComponentClient
+from akorin.core.components import ensure_components_available
+from akorin.core.components import monitor_unavailable_components
+from akorin.core.context import set_app_context_components_registry
+from akorin.core.context import set_app_context_components_statuses
+from akorin.core.context import set_app_context_orchestrator
+from akorin.core.context import set_app_context_settings
+from akorin.core.orchestrator import Orchestrator
+from akorin.core.package import APP_DESCRIPTION
+from akorin.core.package import APP_NAME
+from akorin.core.package import APP_VERSION
+from akorin.core.service import Service
+from akorin.core.settings import Settings
+from akorin.core.tools import ToolRegistry
+from akorin.tools.calculator_tool import CalculatorTool
+from akorin.tools.datetime_tool import DateTimeTool
+from akorin.tools.unit_conversion_tool import UnitConversionTool
+from akorin.utils.cache import SmartCache
+from akorin.utils.logger import configure_logging
+from akorin.utils.ollama_model import load_ollama_model
+from akorin.utils.url import safe_url
 
 
 logger = logging.getLogger(__name__)
@@ -69,11 +73,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
     logger.info(
       "App settings [server]: host=%s port=%s api_prefix=%s", settings.server_host, settings.server_port, settings.api_prefix
     )
-    logger.info(
-      "App settings [ollama]: model=%s base_url=%s",
-      settings.llm_model,
-      safe_url(settings.ollama_base_url_string if settings.ollama_base_url is not None else None),
-    )
+
     logger.info(
       "App settings [generation]: llm_request_timeout=%s temperature=%s llm_max_response_tokens=%s system_prompt=%s",
       settings.llm_request_timeout,
@@ -81,6 +81,13 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       settings.llm_max_response_tokens,
       settings.llm_system_prompt.replace("\n", " ").strip(),
     )
+
+    logger.info(
+      "App settings [ollama]: model=%s base_url=%s",
+      settings.llm_model,
+      safe_url(settings.ollama_base_url_string if settings.ollama_base_url is not None else None),
+    )
+
     logger.info(
       "App settings [components]: isinmi=%s weather=%s rediyo=%s kansa=%s",
       safe_url(settings.isinmi_url),
@@ -88,18 +95,9 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       safe_url(settings.rediyo_url),
       safe_url(settings.kansa_url),
     )
-    logger.info(
-      "App settings [mqtt]: enabled=%s broker=%s port=%s client_id=%s authentication_configured=%s tls=%s ca_certificate=%s keepalive=%ss",
-      settings.is_mqtt_enabled,
-      safe_url(settings.mqtt_broker),
-      settings.mqtt_port,
-      settings.mqtt_client_id or "automatic",
-      bool(settings.mqtt_username and settings.mqtt_password),
-      settings.mqtt_tls_enabled,
-      settings.mqtt_tls_ca_cert or "system/default",
-      settings.mqtt_keepalive,
-    )
+
     logger.info("App settings [logging]: level=%s destination=%s", settings.log_level, settings.log_file or "stderr")
+
     logger.info(
       "App settings [smart_cache]: enabled=%s max_entries=%s llm_ttl_seconds=%s component_ttl_seconds=%s",
       settings.llm_cache_enabled,
@@ -107,8 +105,9 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       settings.llm_cache_ttl_seconds,
       settings.component_cache_ttl_seconds,
     )
+
     logger.info(
-      "App settings [performance]: request_budget=%ss spellcheck_timeout=%ss route_timeout=%ss http_request_timeout=%ss component_stale=%ss circuit_breaker=%s",  # pylint: disable=line-too-long
+      "App settings [performance]: request_budget=%ss spellcheck_timeout=%ss route_timeout=%ss http_request_timeout=%ss component_stale=%ss circuit_breaker=%s",
       settings.request_budget_seconds,
       settings.spellcheck_timeout_seconds,
       settings.route_timeout_seconds,
@@ -117,58 +116,44 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       settings.component_circuit_breaker_enabled,
     )
 
-    client = http_client or httpx.AsyncClient(timeout=settings.http_request_timeout)
-    smart_cache = SmartCache(enabled=settings.llm_cache_enabled, max_entries=settings.llm_cache_max_entries)
-
-    if settings.should_use_native_ollama:
+    if settings.should_use_ollama:
       if settings.ollama_base_url is None:
         logger.warning("OREMI_AKORIN_OLLAMA_BASE_URL is not configured; LLM-backed endpoints will be unavailable")
       else:
         await load_ollama_model(settings)
 
-    zigbee_command_agent = ZigbeeCommandAgent(settings, client, smart_cache)
-    response_agent = ResponseAgent(settings, client, smart_cache)
+    client = http_client or httpx.AsyncClient(timeout=settings.http_request_timeout)
+    smart_cache = SmartCache(enabled=settings.llm_cache_enabled, max_entries=settings.llm_cache_max_entries)
 
     configured_components = (
       (Service.OREMI_ISINMI, settings.isinmi_url, IsinmiClient),
       (Service.OREMI_OJO, settings.ojo_url, OjoClient),
       (Service.OREMI_REDIYO, settings.rediyo_url, RediyoClient),
       (Service.OREMI_KANSA, settings.kansa_url, KansaClient),
+      (Service.OREMI_ISAKOSO, settings.isakoso_url, IsakosoClient),
     )
 
     components: dict[Service, ComponentClient] = {
-      service: component_type(service, str(url), client)
+      service: component_type(
+        name=service,
+        url=str(url),
+        client=client,
+        cache=smart_cache,
+        cache_stale_seconds=settings.component_cache_stale_seconds,
+        cache_ttl_seconds=settings.component_cache_ttl_seconds,
+        circuit_breaker_enabled=settings.component_circuit_breaker_enabled,
+        circuit_breaker_failures=settings.component_circuit_breaker_failures,
+        circuit_breaker_cooldown_seconds=settings.component_circuit_breaker_cooldown_seconds,
+      )
       for service, url, component_type in configured_components
       if url is not None
     }
 
-    for component in components.values():
-      component.cache = smart_cache
-      component.cache_ttl_seconds = settings.component_cache_ttl_seconds
-      component.cache_stale_seconds = settings.component_cache_stale_seconds
-      component.circuit_breaker_enabled = settings.component_circuit_breaker_enabled
-      component.circuit_breaker_failures = settings.component_circuit_breaker_failures
-      component.circuit_breaker_cooldown_seconds = settings.component_circuit_breaker_cooldown_seconds
-
     component_names = [service.value for service in components]
-    logger.info(
-      f"Services configured: external={component_names or ['none']} "
-      f"zigbee={'enabled' if settings.is_mqtt_enabled else 'disabled'}"
-    )
+    logger.info(f"Services configured: external={component_names or ['none']}")
 
-    mqtt = MQTTService(settings)
-    zigbee = ZigbeeComponent(
-      mqtt,
-      command_selector=zigbee_command_agent.select,
-      response_generator=response_agent.generate,
-    )
-
-    handlers = {
-      **components,
-      Service.ZIGBEE: zigbee,
-    }
-
-    orchestrator = Orchestrator(settings, client, handlers, cache=smart_cache)
+    tools_registry = ToolRegistry([DateTimeTool(), CalculatorTool(), UnitConversionTool()])
+    orchestrator = Orchestrator(settings, client, components, cache=smart_cache, tools=tools_registry)
 
     if components:
       logger.info(f"Checking {len(components)} configured external component(s)")
@@ -190,32 +175,15 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
         )
       )
 
-    app.state.client = client
-    app.state.settings = settings
-    app.state.context = AppContext(
-      settings=settings,
-      components=components,  # type: ignore
-      component_statuses=component_statuses,
-      orchestrator=orchestrator,
-      mqtt=mqtt,
-    )
-
-    zigbee_started = False
+    set_app_context_settings(app, settings)
+    set_app_context_orchestrator(app, orchestrator)
+    set_app_context_components_registry(app, components)
+    set_app_context_components_statuses(app, component_statuses)
 
     try:
-      mqtt_ready = await mqtt.start()
-
-      if mqtt_ready:
-        zigbee.start()
-        zigbee_started = True
-      else:
-        logger.info("Zigbee startup skipped: MQTT is disabled")
-
       ready = True
       logger.info(
-        f"Oremi Akọrin ready: components={len(components)} "
-        f"mqtt={'connected' if mqtt_ready else 'disabled'} "
-        f"duration_ms={(perf_counter() - startup_started) * 1000:.1f}"
+        f"Oremi Akọrin ready: components={len(components)} duration_ms={(perf_counter() - startup_started) * 1000:.1f}"
       )
 
       yield
@@ -227,14 +195,16 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       else:
         logger.warning("Oremi Akọrin startup aborted; cleaning up resources")
 
-      if zigbee_started:
-        zigbee.stop()
-
       retry_stop.set()
       if retry_task is not None:
         await retry_task
 
-      mqtt.stop()
+      for component in components.values():
+        try:
+          await component.disconnect()
+        except Exception as exception:
+          logger.warning(f"Error disconnecting component {component.name}: {exception}")
+
       await client.aclose()
       logger.info(f"Oremi Akọrin stopped: duration_ms={(perf_counter() - shutdown_started) * 1000:.1f}")
 
@@ -266,7 +236,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
 
   @app.get("/", include_in_schema=False)
   async def redirect_to_docs():
-    return HTMLResponse(status_code=307, headers={"Location": docs.router.prefix})
+    return HTMLResponse(status_code=307, headers={"Location": prefix + docs.router.prefix})
 
   prefix = "" if settings.api_prefix == "/" else settings.api_prefix
   api_prefix = f"{prefix}/api"

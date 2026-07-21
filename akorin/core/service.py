@@ -12,6 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from .agent import AgentClient
+from enum import StrEnum
 
-__all__ = ["AgentClient"]
+
+class Service(StrEnum):
+  OREMI_DEVICE = "device"
+  OREMI_ISINMI = "isinmi"
+  OREMI_OJO = "ojo"
+  OREMI_REDIYO = "rediyo"
+  OREMI_KANSA = "kansa"
+  OREMI_ISAKOSO = "isakoso"
+  TOOL = "tool"
+  CHAT = "chat"
+  UNKNOWN = "unknown"

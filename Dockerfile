@@ -49,6 +49,6 @@ VOLUME /oremi/data
 
 EXPOSE 5020
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD curl -f http://localhost:5020/health/ || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD prefix="${OREMI_AKORIN_API_PREFIX:-/}"; prefix="/${prefix#/}"; prefix="${prefix%/}"; curl -fsS "http://127.0.0.1:${OREMI_AKORIN_SERVER_PORT:-5040}${prefix}/health/" || exit 1
 
 CMD ["python", "/oremi/akorin"]

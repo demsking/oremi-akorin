@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from .orchestrator import Orchestrator
+from akorin.core.components import ComponentClient
 
-__all__ = ["Orchestrator"]
+
+class IsakosoClient(ComponentClient):
+  pass

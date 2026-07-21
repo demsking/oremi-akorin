@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from typing import Any
-
 from pydantic import BaseModel
 
 
@@ -21,10 +19,3 @@ class OremiServerHealth(BaseModel):
   status: str
   app: str
   version: str
-  llm_model: str
-
-
-class OremiAgentRequest(BaseModel):
-  message: str
-  context: dict[str, Any]
-  tags: list[str]
