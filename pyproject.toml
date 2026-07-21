@@ -1,6 +1,6 @@
 [project]
 name = "oremi-akorin"
-version = "1.0.0b11"
+version = "1.0.0b12"
 description = "Natural-language gateway for the Oremi ecosystem, routing HTTP requests to the appropriate AI-powered services."
 authors = [{ name = "Sébastien Demanou", email = "demsking@gmail.com" }]
 maintainers = [{ name = "Sébastien Demanou", email = "demsking@gmail.com" }]
