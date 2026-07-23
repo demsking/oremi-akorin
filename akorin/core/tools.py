@@ -41,7 +41,7 @@ class MCPTool:
     service: Service,
   ):
     self.name = name
-    self.definition = {
+    self.definition: dict[str, Any] = {
       "type": "function",
       "function": {
         "name": name,

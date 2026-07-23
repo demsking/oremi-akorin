@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from typing import cast
+
 from fastapi import FastAPI
 from fastapi import Request
 
@@ -26,7 +28,7 @@ def set_app_context_settings(app: FastAPI, value: Settings) -> None:
 
 
 def get_app_context_settings(request: Request) -> Settings:
-  return request.app.state.settings
+  return cast(Settings, request.app.state.settings)
 
 
 def set_app_context_components_registry(app: FastAPI, value: ComponentsRegistry) -> None:
@@ -34,7 +36,7 @@ def set_app_context_components_registry(app: FastAPI, value: ComponentsRegistry)
 
 
 def get_app_context_components_registry(request: Request) -> ComponentsRegistry:
-  return request.app.state.components
+  return cast(ComponentsRegistry, request.app.state.components)
 
 
 def set_app_context_components_statuses(app: FastAPI, value: ComponentsStatuses) -> None:
@@ -42,7 +44,7 @@ def set_app_context_components_statuses(app: FastAPI, value: ComponentsStatuses)
 
 
 def get_app_context_components_statuses(request: Request) -> ComponentsStatuses:
-  return request.app.state.component_statuses
+  return cast(ComponentsStatuses, request.app.state.component_statuses)
 
 
 def set_app_context_orchestrator(app: FastAPI, value: Orchestrator) -> None:
@@ -50,4 +52,4 @@ def set_app_context_orchestrator(app: FastAPI, value: Orchestrator) -> None:
 
 
 def get_app_context_orchestrator(request: Request) -> Orchestrator:
-  return request.app.state.orchestrator
+  return cast(Orchestrator, request.app.state.orchestrator)

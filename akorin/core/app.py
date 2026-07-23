@@ -14,11 +14,13 @@
 # ==============================================================================
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from time import perf_counter
 
 import httpx
 from fastapi import FastAPI
+from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.responses import JSONResponse
 
@@ -58,7 +60,7 @@ logger = logging.getLogger(__name__)
 
 def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None) -> FastAPI:
   @asynccontextmanager
-  async def lifespan(app: FastAPI):
+  async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     startup_started = perf_counter()
     ready = False
     service_endpoints = {service.value: safe_url(url) for service, url in settings.service_urls.items()}
@@ -230,12 +232,12 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
   )
 
   @app.exception_handler(Exception)
-  async def unhandled_exception_handler(_, exc: Exception) -> JSONResponse:
+  async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.exception("Unhandled application error")
     return JSONResponse(status_code=500, content={"detail": "Internal server error", "error": str(exc)})
 
   @app.get("/", include_in_schema=False)
-  async def redirect_to_docs():
+  async def redirect_to_docs() -> HTMLResponse:
     return HTMLResponse(status_code=307, headers={"Location": prefix + docs.router.prefix})
 
   prefix = "" if settings.api_prefix == "/" else settings.api_prefix

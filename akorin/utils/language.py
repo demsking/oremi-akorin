@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-import py3langid as langid  # pyright: ignore
+import py3langid as langid  # type: ignore[import-untyped]
 
 Language = str
 
@@ -20,4 +20,4 @@ Language = str
 def detect_language(text: str) -> Language:
   language, _probability = langid.classify(text)
 
-  return language
+  return str(language)

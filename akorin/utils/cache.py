@@ -25,6 +25,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from time import monotonic
 from typing import Any
+from typing import cast
 from typing import TypeVar
 
 
@@ -144,10 +145,10 @@ class SmartCache:
     cached = self.get(key)
 
     if cached is not None:
-      return cached
+      return cast(T, cached)
 
     if key in self._entries:
-      return self._entries[key].value  # type: ignore[return-value]
+      return cast(T, self._entries[key].value)
 
     value = await self._singleflight(key, factory)
     self.set(key, value, ttl_seconds)
@@ -164,14 +165,14 @@ class SmartCache:
     cached = self.get(key)
 
     if cached is not None:
-      return cached
+      return cast(T, cached)
 
     stale = self.get_stale(key)
 
     if stale is not None:
       self.refresh(key, ttl_seconds, stale_seconds, factory)
 
-      return stale
+      return cast(T, stale)
 
     value = await self._singleflight(key, factory)
     self.set(key, value, ttl_seconds, stale_seconds=stale_seconds)
@@ -212,13 +213,16 @@ class SmartCache:
 
     if task is not None:
       self._record(singleflight_waits=1)
-      return await task
+      return cast(T, await task)
 
-    task = asyncio.create_task(factory())  # pyright: ignore
+    async def _runner() -> T:
+      return await factory()
+
+    task = asyncio.create_task(_runner())
     self._inflight[key] = task
 
     try:
-      return await task
+      return cast(T, await task)
     finally:
       if self._inflight.get(key) is task:
         self._inflight.pop(key, None)

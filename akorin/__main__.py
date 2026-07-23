@@ -74,7 +74,7 @@ async def main() -> None:
   await uvicorn.Server(config).serve()
 
 
-def start():
+def start() -> None:
   try:
     asyncio.run(main())
   except KeyboardInterrupt:

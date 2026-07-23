@@ -14,6 +14,7 @@
 # ==============================================================================
 from functools import cached_property
 from functools import lru_cache
+from typing import Any
 from typing import Literal
 
 from pydantic import Field
@@ -220,7 +221,7 @@ class Settings(BaseSettings):
 
   @field_validator("ollama_base_url", mode="before")
   @classmethod
-  def validate_ollama_base_url(cls, value):
+  def validate_ollama_base_url(cls, value: Any) -> Any:
     """Remove trailing slashes from Ollama host URL."""
     if isinstance(value, str):
       value = value.rstrip("/")

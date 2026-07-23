@@ -16,6 +16,7 @@ import asyncio
 import logging
 from time import perf_counter
 from typing import Any
+from typing import Awaitable
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -92,7 +93,7 @@ class Orchestrator:
     remaining = self.settings.request_budget_seconds - elapsed
     return max(0.1, min(step_timeout, remaining))
 
-  async def _timed(self, timeout_seconds: float, operation) -> Any:
+  async def _timed(self, timeout_seconds: float, operation: Awaitable[Any]) -> Any:
     return await asyncio.wait_for(operation, timeout=timeout_seconds)
 
   async def get_effective_tools(self) -> ToolRegistry:
@@ -147,7 +148,7 @@ class Orchestrator:
     all_prompts = []
     prompt_to_service = {}
 
-    async def fetch_for_service(service: Service, handler: "ComponentClient"):
+    async def fetch_for_service(service: Service, handler: "ComponentClient") -> tuple[Service, list[Any]]:
       if not handler.connected:
         logger.warning(f"[{request_id}] Skipping prompt discovery for {service.value}: component is disconnected")
 
@@ -250,7 +251,7 @@ class Orchestrator:
 
     return response
 
-  async def _execute_chat_service(self, request: ProcessRequest, language: str, request_id: str) -> dict:
+  async def _execute_chat_service(self, request: ProcessRequest, language: str, request_id: str) -> dict[str, Any]:
     dispatch_started = perf_counter()
     logger.debug(f"[{request_id}] Fetching effective tools for CHAT service")
     effective_tools = await self.get_effective_tools()
@@ -286,8 +287,13 @@ class Orchestrator:
     return {"service": service, "confidence": confidence, "message": chat_result.message, "data": data}
 
   async def _execute_mcp_service(
-    self, request: ProcessRequest, language: str, decision: RouteDecision, request_id: str, prompt_to_service: dict
-  ) -> dict:
+    self,
+    request: ProcessRequest,
+    language: str,
+    decision: RouteDecision,
+    request_id: str,
+    prompt_to_service: dict[str, Service],
+  ) -> dict[str, Any]:
     handler = self.handlers.get(decision.service)
 
     if not handler:
@@ -371,7 +377,7 @@ class Orchestrator:
 
   async def _handle_execution_failure(
     self, exception: Exception, request: ProcessRequest, language: str, decision: RouteDecision, request_id: str
-  ) -> dict:
+  ) -> dict[str, Any]:
     logger.warning(f"[{request_id}] Execution failed for {decision.service.value}: {exception}")
 
     if isinstance(exception, ComponentRequestError):
@@ -401,11 +407,11 @@ class Orchestrator:
       request.context = self._context_for_service(Service.CHAT, request.context)
       chat_result = await self._chat_with_tools(request.message, request, language)
 
-      data = {"fallback_reason": str(exception)}
+      data: dict[str, Any] = {"fallback_reason": str(exception)}
 
       if chat_result.tools:
         logger.debug(f"[{request_id}] Fallback execution fired tools: {[t.name for t in chat_result.tools]}")
-        data["tools"] = [r.data | {"name": r.name} for r in chat_result.tools]  # pyright: ignore
+        data["tools"] = [r.data | {"name": r.name} for r in chat_result.tools]
 
       return {
         "ok": True,

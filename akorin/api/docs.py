@@ -42,8 +42,9 @@ async def static_asset(file_path: str) -> FileResponse:
 
 
 @router.get("/", include_in_schema=False, response_class=HTMLResponse)
-async def html_documentation():
-  return f"""
+async def html_documentation() -> HTMLResponse:
+  return HTMLResponse(
+    f"""
     <!DOCTYPE html>
     <html>
       <head>
@@ -64,7 +65,7 @@ async def html_documentation():
           openapi.info.description = `{SERVICE_DESCRIPTION}`;
 
           if (isGitlabPage) {{
-            openapi.servers = [];
+            delete openapi.servers;
           }}
 
           Scalar.createApiReference('#app', {{
@@ -101,3 +102,4 @@ async def html_documentation():
       </body>
     </html>
   """
+  )

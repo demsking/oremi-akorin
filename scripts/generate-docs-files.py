@@ -24,14 +24,14 @@ HTDOC_OPENAPI_FILE = HTDOCS_DIR / "openapi.json"
 client = TestClient(app)
 
 
-def generate_openapi():
+def generate_openapi() -> None:
   response = client.get("/openapi.json")
   openapi = response.content
 
   HTDOC_OPENAPI_FILE.write_bytes(openapi)
 
 
-def generate_static_doc():
+def generate_static_doc() -> None:
   response = client.get("/docs")
   content = response.content.decode("utf-8").replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
 

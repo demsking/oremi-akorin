@@ -67,7 +67,7 @@ class AgentClient(Generic[OutputModel], ABC):
   RESULT_TYPE: ClassVar[type[Any]] = str
   RESPONSE_FORMAT: ClassVar[Any] = None
 
-  SCHEMA_ANNOTATION_MAPPING: ClassVar[dict] = {
+  SCHEMA_ANNOTATION_MAPPING: ClassVar[dict[str, type[Any]]] = {
     "string": str,
     "integer": int,
     "number": float,
@@ -205,16 +205,11 @@ class AgentClient(Generic[OutputModel], ABC):
     return await self._execute_with_cache(cache_key, executor)
 
   async def _run_agent(self, prompt: str, system_prompt: str) -> OutputModel:
-    # Recreate agent dynamically if the system prompt has been overridden at runtime
-    agent = self.agent
-
-    if self.agent is None or self.agent.system_prompt() != system_prompt:
-      agent = self._create_agent(system_prompt=system_prompt)
-
+    agent = self._create_agent(system_prompt=system_prompt)
     cache_key = self._cache_key(prompt, system_prompt=system_prompt, output_type=None)
 
     async def executor() -> OutputModel:
-      result = await agent.run(prompt)  # pyright: ignore
+      result = await agent.run(prompt)
       return self._parse_output(result.output)
 
     return await self._execute_with_cache(cache_key, executor)
@@ -285,8 +280,8 @@ class AgentClient(Generic[OutputModel], ABC):
       capabilities=[Thinking(effort=False)],
     )
 
-    result = await agent.run(prompt)  # pyright: ignore
-    return ChatResult(message=str(result.output).strip(), tools=executed_tools)
+    run_result = await agent.run(prompt)  # pyright: ignore
+    return ChatResult(message=str(run_result.output).strip(), tools=executed_tools)
 
   @classmethod
   def _build_tool_function(
@@ -301,9 +296,10 @@ class AgentClient(Generic[OutputModel], ABC):
       executed_tools.append(result)
       return json.dumps(result.data, ensure_ascii=False)
 
-    func_def = registry.tools[name].definition.get("function", {})
-    props = func_def.get("parameters", {}).get("properties", {})
-    req = set(func_def.get("parameters", {}).get("required", []))
+    func_def = cast(dict[str, Any], registry.tools[name].definition.get("function", {}))
+    params = cast(dict[str, Any], func_def.get("parameters", {}))
+    props = cast(dict[str, Any], params.get("properties", {}))
+    req = set(cast(list[str], params.get("required", [])))
 
     run_tool.__name__ = name
     run_tool.__qualname__ = name
@@ -335,4 +331,4 @@ class AgentClient(Generic[OutputModel], ABC):
 
   @staticmethod
   def _schema_annotation(schema: dict[str, Any]) -> Any:
-    return AgentClient.SCHEMA_ANNOTATION_MAPPING.get(schema.get("type"), Any)
+    return AgentClient.SCHEMA_ANNOTATION_MAPPING.get(str(schema.get("type")), Any)

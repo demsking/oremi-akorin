@@ -17,10 +17,13 @@ import logging
 from contextlib import AsyncExitStack
 from time import monotonic
 from typing import Any
+from typing import cast
 
 import httpx
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.types import Implementation
+from pydantic import AnyUrl
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -95,7 +98,7 @@ class ComponentClient:
     self._prompts: list[Any] = []
 
     self.server_url = self.base_url
-    self._server_info = None
+    self._server_info: Implementation | None = None
     self._connected = False
 
   @property
@@ -215,7 +218,10 @@ class ComponentClient:
       if self._session is None:
         await self.connect()
 
-      result = await self._session.read_resource(uri)  # pyright: ignore
+      if self._session is None:
+        raise ComponentUnavailable(self.name, "Failed to establish MCP session")
+
+      result = await self._session.read_resource(cast(AnyUrl, uri))
 
       self._record_success()
 
@@ -240,7 +246,10 @@ class ComponentClient:
       if self._session is None:
         await self.connect()
 
-      result = await self._session.get_prompt(name, arguments)  # pyright: ignore
+      if self._session is None:
+        raise ComponentUnavailable(self.name, "Failed to establish MCP session")
+
+      result = await self._session.get_prompt(name, arguments)
 
       self._record_success()
 
@@ -268,12 +277,15 @@ class ComponentClient:
       if self._session is None:
         await self.connect()
 
-      result = await self._session.call_tool(name, arguments)  # pyright: ignore
+      if self._session is None:
+        raise ComponentUnavailable(self.name, "Failed to establish MCP session")
+
+      result = await self._session.call_tool(name, arguments)
 
       self._record_success()
 
       if use_cache:
-        self.cache.set(cache_key, result, ttl_seconds=self.cache_ttl_seconds)  # pyright: ignore
+        self.cache.set(cache_key, result, ttl_seconds=self.cache_ttl_seconds)
 
       return result
     except ComponentUnavailable as exception:
@@ -380,12 +392,16 @@ async def monitor_unavailable_components(
     )
 
     for (service, component), result in zip(component_items, results, strict=True):
-      available = isinstance(result, BaseModel)
       previous = statuses.get(service)
-      statuses[service] = available
       server_url = getattr(component, "server_url", "unknown")
 
-      if available and previous is not True:
-        logger.info(f"Component {service.value} recovered: {describe_service_info(result)} at {server_url}")
-      elif not available and previous is not False:
-        logger.warning(f"Component {service.value} became unavailable at {server_url}: {result}")
+      if isinstance(result, BaseModel):
+        statuses[service] = True
+
+        if previous is not True:
+          logger.info(f"Component {service.value} recovered: {describe_service_info(result)} at {server_url}")
+      else:
+        statuses[service] = False
+
+        if previous is not False:
+          logger.warning(f"Component {service.value} became unavailable at {server_url}: {result}")
