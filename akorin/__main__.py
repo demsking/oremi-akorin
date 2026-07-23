@@ -80,6 +80,9 @@ def start():
   except KeyboardInterrupt:
     pass
   except Exception as exception:
+    if logger.isEnabledFor(logging.DEBUG):
+      logger.exception(exception)
+
     logger.error(f"Oremi Akọrin failed to start: {exception}")
     sys.exit(3)
 
