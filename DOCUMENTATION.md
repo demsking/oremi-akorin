@@ -456,8 +456,14 @@ for development environment and contribution guidance.
 
 ## Versioning
 
-Oremi Akọrin follows [Semantic Versioning](https://semver.org/). Display the
-installed version with:
+Oremi Akọrin project adheres to [Semantic Versioning](https://semver.org/)
+(SemVer). Version numbers follow the `MAJOR.MINOR.PATCH` format:
+
+- **MAJOR** version increments for incompatible API changes
+- **MINOR** version increments for backward-compatible new functionality
+- **PATCH** version increments for backward-compatible bug fixes
+
+The current version can be found by running:
 
 ```bash
 oremi-akorin --version
