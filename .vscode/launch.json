@@ -21,11 +21,11 @@
       "env": {
         "OREMI_AKORIN_LOG_LEVEL": "DEBUG",
         "OREMI_AKORIN_OLLAMA_BASE_URL": "http://localhost:31434",
-        "OREMI_AKORIN_ISAKOSO_URL": "http://localhost:35089/mcp/",
-        "OREMI_AKORIN_ISINMI_URL": "http://localhost:35073/mcp/",
-        "OREMI_AKORIN_OJO_URL": "http://localhost:35040/mcp/",
-        "OREMI_AKORIN_REDIYO_URL": "http://localhost:35076/mcp/",
-        "OREMI_AKORIN_KANSA_URL": "http://localhost:35046/mcp/"
+        "OREMI_AKORIN_ISAKOSO_URL": "http://localhost:35089/mcp",
+        "OREMI_AKORIN_ISINMI_URL": "http://localhost:35073/mcp",
+        "OREMI_AKORIN_OJO_URL": "http://localhost:35040/mcp",
+        "OREMI_AKORIN_REDIYO_URL": "http://localhost:35076/mcp",
+        "OREMI_AKORIN_KANSA_URL": "http://localhost:35046/mcp"
       },
       "console": "integratedTerminal",
       "justMyCode": false

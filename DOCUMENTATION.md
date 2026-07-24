@@ -135,11 +135,11 @@ services:
       - 5020:5020
     environment:
       OREMI_AKORIN_OLLAMA_BASE_URL: http://ollama:11434
-      OREMI_AKORIN_ISAKOSO_URL: http://isakoso:5089/mcp/
-      OREMI_AKORIN_ISINMI_URL: http://isinmi:5073/mcp/
-      OREMI_AKORIN_OJO_URL: http://ojo:5040/mcp/
-      OREMI_AKORIN_REDIYO_URL: http://rediyo:5076/mcp/
-      OREMI_AKORIN_KANSA_URL: http://kansa:5046/mcp/
+      OREMI_AKORIN_ISAKOSO_URL: http://isakoso:5089/mcp
+      OREMI_AKORIN_ISINMI_URL: http://isinmi:5073/mcp
+      OREMI_AKORIN_OJO_URL: http://ojo:5040/mcp
+      OREMI_AKORIN_REDIYO_URL: http://rediyo:5076/mcp
+      OREMI_AKORIN_KANSA_URL: http://kansa:5046/mcp
 
   isakoso:
     image: demsking/oremi-isakoso
