@@ -338,7 +338,7 @@ capabilities expand significantly when connected to other Oremi services.
 - **Oremi Isinmi** – Alarm, timer, reminder, and calendar management.
   Handles scheduling requests and other time-based personal assistant tasks.
 
-  Documentation: https://demsking.gitlab.io/oremi-isinmi-agent
+  Documentation: https://demsking.gitlab.io/oremi-isinmi
 
 - **Oremi Ojọ** – Weather forecasts, current conditions, air quality,
   pollen information, geocoding, and weather alerts.
@@ -424,22 +424,6 @@ When using an `ollama:` model, confirm that `OREMI_AKORIN_OLLAMA_BASE_URL`
 is set and includes `http://` or `https://`. Component settings must target the
 MCP streamable HTTP endpoint, for example `http://ojo:5040/mcp`.
 
-### A configured component prevents startup
-
-Akọrin intentionally verifies every configured component. Check its
-`/api/server` endpoint, or remove the corresponding URL when the integration
-is not needed.
-
-### Ollama responds but tools are not called
-
-Confirm that the selected Ollama model supports tool calling. The default
-`qwen3.5:2b` is the expected model. Akọrin no longer pulls models internally,
-so verify that the model is installed:
-
-```bash
-ollama list
-```
-
 ### More diagnostic output
 
 ```bash
@@ -473,6 +457,14 @@ oremi-akorin --version
 
 Copyright 2026 Sébastien Demanou. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0. See the
-[LICENSE](https://gitlab.com/demsking/oremi-akorin/-/blob/main/LICENSE) for the
-complete license text.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://gitlab.com/demsking/oremi-akorin/-/blob/main/LICENSE
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
