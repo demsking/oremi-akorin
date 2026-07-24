@@ -148,7 +148,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
         circuit_breaker_cooldown_seconds=settings.component_circuit_breaker_cooldown_seconds,
       )
       for service, url, component_type in configured_components
-      if url is not None
+      if url
     }
 
     component_names = [service.value for service in components]

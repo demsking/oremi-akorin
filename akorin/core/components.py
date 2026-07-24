@@ -78,7 +78,7 @@ class ComponentClient:
     circuit_breaker_cooldown_seconds: float = 30.0,
   ):
     self.name = name
-    self.base_url = url
+    self.server_url = url
     self.client = client
     self.cache = cache
     self.cache_ttl_seconds = cache_ttl_seconds
@@ -97,7 +97,6 @@ class ComponentClient:
     self._resources: list[Any] = []
     self._prompts: list[Any] = []
 
-    self.server_url = self.base_url
     self._server_info: Implementation | None = None
     self._connected = False
 
@@ -117,7 +116,7 @@ class ComponentClient:
 
       try:
         read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
-          streamable_http_client(self.base_url, http_client=self.client)
+          streamable_http_client(self.server_url, http_client=self.client)
         )
 
         session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
@@ -166,13 +165,13 @@ class ComponentClient:
         prompt_names = ", ".join([p.name for p in self._prompts])
 
         logger.info(
-          f"Connected to MCP server {self.name} at {self.base_url} "
+          f"Connected to MCP server {self.name} at {self.server_url} "
           f"(tools: {tool_names}) (resources: {resource_names}) (prompts: {prompt_names})"
         )
 
         self._connected = True
       except Exception as exception:
-        logger.error(f"Failed to connect to MCP server {self.name} at {self.base_url}: {exception}")
+        logger.error(f"Failed to connect to MCP server {self.name} at {self.server_url}: {exception}")
         self._record_failure()
 
         self._available = False
