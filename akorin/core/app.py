@@ -124,7 +124,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       else:
         await load_ollama_model(settings)
 
-    client = http_client or httpx.AsyncClient(timeout=settings.http_request_timeout)
+    client = http_client or httpx.AsyncClient(timeout=settings.http_request_timeout, follow_redirects=True)
     smart_cache = SmartCache(enabled=settings.llm_cache_enabled, max_entries=settings.llm_cache_max_entries)
 
     configured_components = (
