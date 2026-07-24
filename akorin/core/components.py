@@ -21,8 +21,10 @@ from typing import cast
 
 import httpx
 from mcp import ClientSession
+from mcp import Resource
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import Implementation
+from mcp.types import Prompt
 from pydantic import AnyUrl
 from pydantic import BaseModel
 from pydantic import ConfigDict
@@ -94,8 +96,8 @@ class ComponentClient:
     self._lock = asyncio.Lock()
     self._available = False
     self._tools: list[MCPTool] = []
-    self._resources: list[Any] = []
-    self._prompts: list[Any] = []
+    self._resources: list[Resource] = []
+    self._prompts: list[Prompt] = []
 
     self._server_info: Implementation | None = None
     self._connected = False
@@ -139,8 +141,8 @@ class ComponentClient:
           )
 
         capabilities = getattr(init_result, "capabilities", None)
-
         self._resources = []
+
         if capabilities is None or getattr(capabilities, "resources", None) is not None:
           try:
             resources_result = await session.list_resources()
