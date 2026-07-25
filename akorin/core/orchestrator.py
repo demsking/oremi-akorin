@@ -224,23 +224,32 @@ class Orchestrator:
       response_payload = await self._handle_execution_failure(exception, request, language, decision, request_id)
 
     # 3. Finalize Response
+    response_message = response_payload.get("message", "")
+    response_data = response_payload.get("data", None)
+    payload_ok = response_payload.get("ok")
+    is_ok = bool(payload_ok) if payload_ok is not None else bool(response_message)
+
+    if not is_ok and not response_message:
+      response_message = await self.response_agent.generate(
+        "service_execution_failed",
+        language,
+        {"service": decision.service.value, "request": request.message},
+      )
+
     response = ProcessResponse(
-      ok=response_payload.get("ok", True),
+      ok=is_ok,
       input=request.message,
       language=language,
       service=response_payload.get("service", decision.service),
-      message=response_payload["message"],
-      data=response_payload.get("data", {}),
+      message=response_message,
+      data=response_data,
       confidence=response_payload.get("confidence", decision.confidence),
     )
 
     response.commands = select_device_commands(response)
 
     logger.info(
-      f"[{request_id}] Processing completed: ok={response.ok} "
-      f"service={response.service.value} router={decision} "
-      f"confidence={response.confidence:.2f} "
-      f"duration_ms={(perf_counter() - processing_started) * 1000:.1f}"
+      f"[{request_id}] Processing completed in {(perf_counter() - processing_started) * 1000:.1f}ms: {decision} {response}"
     )
 
     return response
@@ -333,7 +342,7 @@ class Orchestrator:
     except Exception as exception:
       logger.warning(f"[{request_id}] Prompt rendering failed, falling back to original message: {exception}")
 
-    logger.debug(f"[{request_id}] Initiating chat_with_tools for {decision.service.value}")
+    logger.debug(f"[{request_id}] Initiating chat_with_tools for {decision.service.value}.\nMessage: {message_to_send}")
 
     chat_result = await self._chat_with_tools(message_to_send, request, language, tools=component_tools)
     data = {}

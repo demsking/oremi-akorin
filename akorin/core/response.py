@@ -127,8 +127,8 @@ class ProcessResponse(BaseModel):
   language: Language = Field(description="Detected language of the input text in ISO 639-1 format.")
   service: Service = Field(description="Service that handled the request (e.g., 'chat', 'tool', or external service).")
   message: str = Field(description="Human-readable response message containing the processing result or error details.")
-  data: Any = Field(
-    default_factory=dict,
+  data: dict[str, Any] | None = Field(
+    default=None,
     description="Additional structured data from the processing. Content varies based on the service and request type.",
   )
   confidence: float = Field(
@@ -138,3 +138,17 @@ class ProcessResponse(BaseModel):
     default_factory=list,
     description="Ordered commands selected by Akọrin for the requesting Oremi Device node.",
   )
+
+  def __str__(self) -> str:
+    return (
+      f"Response("
+      f"ok={self.ok}, "
+      f"input={self.input}, "
+      f"language={self.language}, "
+      f"service={self.service.value}, "
+      f"message={self.message or 'None'}, "
+      f"data={list(self.data.keys()) if self.data else None}, "
+      f"confidence={self.confidence}, "
+      f"commands={len(self.commands)}"
+      f")"
+    )

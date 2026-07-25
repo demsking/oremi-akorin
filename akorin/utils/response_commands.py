@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 
 def select_device_commands(response: ProcessResponse) -> list[OremiDeviceCommand]:
-  """Translate a successful service result into ordered Oremi Device commands."""
-  if not response.ok or not isinstance(response.data, dict):
+  """Translate a service result into ordered Oremi Device commands."""
+  if not isinstance(response.data, dict):
     return []
 
   try:
@@ -49,6 +49,9 @@ def select_device_commands(response: ProcessResponse) -> list[OremiDeviceCommand
       return _schedule_commands(response.message, response.data)
   except (TypeError, ValidationError, ValueError) as exception:
     logger.warning(f"Could not select Oremi Device commands for {response.service}: {exception}")
+
+  if response.message:
+    return [SpeakCommand(text=response.message)]
 
   return []
 

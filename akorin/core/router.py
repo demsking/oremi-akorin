@@ -28,9 +28,17 @@ class RouteSemanticDecision(BaseModel):
   service: Service
   confidence: float = Field(default=0.8, ge=0.0, le=1.0)
 
+  def __str__(self) -> str:
+    return f"RouteSemanticDecision(service={self.service.name}, confidence={self.confidence})"
+
 
 class RoutePromptDecision(RouteSemanticDecision, BaseModel):
   selected_prompt: SelectedPrompt
+
+  def __str__(self) -> str:
+    return (
+      f"RoutePromptDecision(service={self.service.name}, confidence={self.confidence}, selected_prompt={self.selected_prompt})"
+    )
 
 
 type RouteDecision = RouteSemanticDecision | RoutePromptDecision

@@ -118,7 +118,9 @@ async def test_process_endpoint(monkeypatch):
   mock_write = MagicMock()
 
   mock_session = AsyncMock()
-  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo("oremi-weather", "1.2.3"), "capabilities": FakeCapabilities(tools=True)})()
+  mock_init_result = type(
+    "FakeInitResult", (), {"serverInfo": FakeServerInfo("oremi-weather", "1.2.3"), "capabilities": FakeCapabilities(tools=True)}
+  )()
   mock_session.initialize = AsyncMock(return_value=mock_init_result)
   mock_session.list_tools = AsyncMock(
     return_value=FakeToolsList(
@@ -236,3 +238,75 @@ async def test_startup_marks_invalid_component_service_info_as_unavailable():
   payload = response.json()
   assert payload["status"] == "degraded"
   assert payload["components"]["ojo"] == "unavailable"
+
+
+@pytest.mark.asyncio
+async def test_process_endpoint_when_payload_ok_is_false():
+  from akorin.core.orchestrator import Orchestrator
+  from akorin.core.request import ProcessRequest
+  from akorin.core.tools import ToolRegistry
+  from akorin.utils.cache import SmartCache
+
+  mock_response_agent = AsyncMock()
+  mock_response_agent.generate.return_value = "Service error message"
+
+  settings = isolated_settings()
+  client = MagicMock()
+  cache = SmartCache(enabled=True, max_entries=100)
+  tools = ToolRegistry([])
+
+  orchestrator = Orchestrator(
+    settings=settings,
+    client=client,
+    handlers={},
+    tools=tools,
+    cache=cache,
+  )
+  orchestrator.response_agent = mock_response_agent
+  request = ProcessRequest(message="test message")
+
+  with patch.object(orchestrator, "_execute_chat_service", side_effect=Exception("Failed execution")):
+    response = await orchestrator.process(request)
+
+  assert response.ok is False
+  assert response.message == "Service error message"
+  assert len(response.commands) == 1
+  assert response.commands[0].type == "speak"
+  assert response.commands[0].text == "Service error message"
+
+
+@pytest.mark.asyncio
+async def test_process_endpoint_when_ok_is_false_and_message_empty():
+  from akorin.core.orchestrator import Orchestrator
+  from akorin.core.request import ProcessRequest
+  from akorin.core.tools import ToolRegistry
+  from akorin.utils.cache import SmartCache
+
+  mock_response_agent = AsyncMock()
+  mock_response_agent.generate.return_value = "Generated fallback error message"
+
+  settings = isolated_settings()
+  client = MagicMock()
+  cache = SmartCache(enabled=True, max_entries=100)
+  tools = ToolRegistry([])
+
+  orchestrator = Orchestrator(
+    settings=settings,
+    client=client,
+    handlers={},
+    tools=tools,
+    cache=cache,
+  )
+  orchestrator.response_agent = mock_response_agent
+
+  request = ProcessRequest(message="test message")
+
+  with patch.object(orchestrator, "_execute_chat_service", return_value={"ok": False, "message": ""}):
+    response = await orchestrator.process(request)
+
+  assert response.ok is False
+  assert response.message == "Generated fallback error message"
+  assert len(response.commands) == 1
+  assert response.commands[0].type == "speak"
+  assert response.commands[0].text == "Generated fallback error message"
+  mock_response_agent.generate.assert_called_once()
