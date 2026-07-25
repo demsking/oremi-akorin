@@ -93,6 +93,12 @@ async def test_process_endpoint(monkeypatch):
       self.name = name
       self.version = version
 
+  class FakeCapabilities:
+    def __init__(self, tools=False, resources=False, prompts=False):
+      self.tools = tools
+      self.resources = resources
+      self.prompts = prompts
+
   def mock_build_model(settings, model_settings, client):
     import inspect
     from akorin.agents.command_agent import CommandAgent
@@ -112,7 +118,7 @@ async def test_process_endpoint(monkeypatch):
   mock_write = MagicMock()
 
   mock_session = AsyncMock()
-  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo("oremi-weather", "1.2.3")})()
+  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo("oremi-weather", "1.2.3"), "capabilities": FakeCapabilities(tools=True)})()
   mock_session.initialize = AsyncMock(return_value=mock_init_result)
   mock_session.list_tools = AsyncMock(
     return_value=FakeToolsList(

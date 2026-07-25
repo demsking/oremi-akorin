@@ -24,7 +24,7 @@ from akorin.agents.command_agent import CommandAgent
 from akorin.core.router import RequestRouter
 from akorin.core.router import RouteContext
 from akorin.core.router import RouteDecision
-from akorin.core.service import Service
+from akorin.core.router import RouteSemanticDecision
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +34,10 @@ class SemanticRouter(RequestRouter):
     self.agent = agent
     self.timeout_calculator = timeout_calculator
 
-  async def route(self, context: RouteContext) -> RouteDecision:
+  async def route(self, context: RouteContext) -> RouteDecision | None:
     logger.debug(f"[{context.request_id}] Evaluating SemanticRouter")
     routing_started = perf_counter()
+
     try:
       timeout = self.timeout_calculator(context.started_at)
       logger.debug(f"[{context.request_id}] SemanticRouter: Allowed timeout is {timeout:.2f}s")
@@ -48,8 +49,8 @@ class SemanticRouter(RequestRouter):
         f"confidence={decision.confidence:.2f} "
         f"duration_ms={(perf_counter() - routing_started) * 1000:.1f}"
       )
-      return RouteDecision(service=decision.service, confidence=decision.confidence, source="semantic")
+      return RouteSemanticDecision(service=decision.service, confidence=decision.confidence)
 
     except (asyncio.TimeoutError, httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exception:
-      logger.warning(f"[{context.request_id}] SemanticRouter failed, using fallback: {exception}")
-      return RouteDecision(service=Service.UNKNOWN, confidence=0.0, source="fallback")
+      logger.warning(f"[{context.request_id}] SemanticRouter failed: {exception}")
+      return None

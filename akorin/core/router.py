@@ -14,32 +14,35 @@
 # ==============================================================================
 from abc import ABC
 from abc import abstractmethod
-from dataclasses import dataclass
-from dataclasses import field
-from typing import Any
 
+from mcp.types import Prompt
+from pydantic import BaseModel
+from pydantic import Field
+
+from akorin.agents.prompt_selector_agent import SelectedPrompt
 from akorin.core.request import ProcessRequest
-from akorin.core.response import ProcessResponse
 from akorin.core.service import Service
 
 
-@dataclass
-class RouteDecision:
+class RouteSemanticDecision(BaseModel):
   service: Service
-  confidence: float
-  source: str
-  selected_prompt: Any | None = None
-  direct_response: ProcessResponse | None = None
+  confidence: float = Field(default=0.8, ge=0.0, le=1.0)
 
 
-@dataclass
-class RouteContext:
+class RoutePromptDecision(RouteSemanticDecision, BaseModel):
+  selected_prompt: SelectedPrompt
+
+
+type RouteDecision = RouteSemanticDecision | RoutePromptDecision
+
+
+class RouteContext(BaseModel):
   request: ProcessRequest
   request_id: str
   language: str
   started_at: float
-  all_prompts: list[Any] = field(default_factory=list)
-  prompt_to_service: dict[str, Service] = field(default_factory=dict)
+  all_prompts: list[Prompt] = Field(default_factory=list)
+  prompt_to_service: dict[str, Service] = Field(default_factory=dict)
 
 
 class RequestRouter(ABC):

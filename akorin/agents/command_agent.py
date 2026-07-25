@@ -14,12 +14,10 @@
 # ==============================================================================
 from __future__ import annotations
 
-from pydantic import BaseModel
-from pydantic import Field
 from pydantic_ai import ModelSettings
 
 from akorin.core.agent import AgentClient
-from akorin.core.service import Service
+from akorin.core.router import RouteSemanticDecision
 
 
 SYSTEM_PROMPT = (
@@ -61,14 +59,9 @@ SYSTEM_PROMPT = (
 )
 
 
-class RouteDecision(BaseModel):
-  service: Service
-  confidence: float = Field(default=0.8, ge=0.0, le=1.0)
-
-
-class CommandAgent(AgentClient[RouteDecision]):
+class CommandAgent(AgentClient[RouteSemanticDecision]):
   SYSTEM_PROMPT = SYSTEM_PROMPT
-  RESULT_TYPE = RouteDecision
+  RESULT_TYPE = RouteSemanticDecision
   RESPONSE_FORMAT = "json"
 
   def _get_model_settings(self) -> ModelSettings:
@@ -80,5 +73,5 @@ class CommandAgent(AgentClient[RouteDecision]):
       thinking=False,
     )
 
-  async def classify(self, message: str) -> RouteDecision:
+  async def classify(self, message: str) -> RouteSemanticDecision:
     return await self._run(message)

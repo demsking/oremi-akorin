@@ -142,8 +142,6 @@ async def test_resource_and_prompt_tools_execution():
   # Setup fake component handlers
   class MockHandler:
     def __init__(self):
-      self.connected = True
-
       self.resources = [
         t.Resource(
           uri=AnyUrl("device://list"),

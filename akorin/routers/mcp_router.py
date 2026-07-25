@@ -17,7 +17,7 @@ import logging
 from akorin.agents.prompt_selector_agent import PromptSelectorAgent
 from akorin.core.router import RequestRouter
 from akorin.core.router import RouteContext
-from akorin.core.router import RouteDecision
+from akorin.core.router import RoutePromptDecision
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ class McpPromptRouter(RequestRouter):
   def __init__(self, agent: PromptSelectorAgent):
     self.agent = agent
 
-  async def route(self, context: RouteContext) -> RouteDecision | None:
+  async def route(self, context: RouteContext) -> RoutePromptDecision | None:
     logger.debug(f"[{context.request_id}] Evaluating McpPromptRouter with {len(context.all_prompts)} available prompts")
 
     if not context.all_prompts:
@@ -43,7 +43,7 @@ class McpPromptRouter(RequestRouter):
             f"[{context.request_id}] McpPromptRouter: Prompt selected: name={selected_prompt.name!r} service={service.value}"
           )
 
-          return RouteDecision(service=service, confidence=1.0, source="prompt", selected_prompt=selected_prompt)
+          return RoutePromptDecision(service=service, confidence=1.0, selected_prompt=selected_prompt)
 
       logger.debug(f"[{context.request_id}] McpPromptRouter: No matching prompt found")
     except Exception as exception:

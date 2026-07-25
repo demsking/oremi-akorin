@@ -28,6 +28,7 @@ from akorin.components.rediyo import RediyoClient
 from akorin.core.components import monitor_unavailable_components
 from akorin.core.oremi import OremiServerHealth
 from akorin.core.service import Service
+from tests.test_smart_cache import SmartCache
 
 
 class FakeTool:
@@ -48,6 +49,13 @@ class FakeServerInfo:
     self.version = version
 
 
+class FakeCapabilities:
+  def __init__(self, tools=False, resources=False, prompts=False):
+    self.tools = tools
+    self.resources = resources
+    self.prompts = prompts
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
   ("component_type", "name", "url"),
@@ -59,11 +67,13 @@ class FakeServerInfo:
   ],
 )
 async def test_component_mcp_client_workflow(component_type, name, url, caplog):
+  cache = SmartCache(enabled=False, max_entries=10)
+
   mock_read = MagicMock()
   mock_write = MagicMock()
 
   mock_session = AsyncMock()
-  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo(name.value, "1.4.0")})()
+  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo(name.value, "1.4.0"), "capabilities": FakeCapabilities(tools=True)})()
   mock_session.initialize = AsyncMock(return_value=mock_init_result)
   mock_session.list_tools = AsyncMock(return_value=FakeToolsList([FakeTool("do_action", "Do some action", {"type": "object"})]))
   mock_session.call_tool = AsyncMock(return_value="tool_call_result")
@@ -82,13 +92,14 @@ async def test_component_mcp_client_workflow(component_type, name, url, caplog):
     patch("akorin.core.components.streamable_http_client", return_value=AsyncContextManagerMock((mock_read, mock_write, None))),
     patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session)),
   ):
-    component = component_type(name, url, httpx.AsyncClient(), None)
+    component = component_type(name, url, httpx.AsyncClient(), cache)
 
     # 1. Test connect
     import logging
 
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
       await component.connect()
+
     assert component._session == mock_session
     assert any(
       f"Connected to MCP server {name.value}" in record.message and "do_action" in record.message for record in caplog.records
@@ -159,7 +170,7 @@ async def test_component_reconnects_on_ping_failure():
   mock_write = MagicMock()
 
   mock_session = AsyncMock()
-  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo("test_service", "1.4.0")})()
+  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo("test_service", "1.4.0"), "capabilities": FakeCapabilities(tools=True)})()
   mock_session.initialize = AsyncMock(return_value=mock_init_result)
 
   # Initial tools
@@ -180,7 +191,7 @@ async def test_component_reconnects_on_ping_failure():
     patch("akorin.core.components.streamable_http_client", return_value=AsyncContextManagerMock((mock_read, mock_write, None))),
     patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session)),
   ):
-    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx.AsyncClient(), None)
+    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx.AsyncClient(), SmartCache(enabled=False, max_entries=10))
 
     # 1. Connect first time
     await component.connect()
@@ -216,7 +227,7 @@ async def test_component_disconnects_on_call_tool_failure():
   mock_write = MagicMock()
 
   mock_session = AsyncMock()
-  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo("test_service", "1.4.0")})()
+  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo("test_service", "1.4.0"), "capabilities": FakeCapabilities(tools=True)})()
   mock_session.initialize = AsyncMock(return_value=mock_init_result)
   mock_session.list_tools = AsyncMock(return_value=FakeToolsList([]))
   mock_session.call_tool = AsyncMock(side_effect=RuntimeError("connection error"))
@@ -235,7 +246,7 @@ async def test_component_disconnects_on_call_tool_failure():
     patch("akorin.core.components.streamable_http_client", return_value=AsyncContextManagerMock((mock_read, mock_write, None))),
     patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session)),
   ):
-    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx.AsyncClient(), None)
+    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx.AsyncClient(), SmartCache(enabled=False, max_entries=10))
 
     # 1. Connect
     await component.connect()
@@ -284,12 +295,9 @@ async def test_component_connect_cancellation_cleanup():
   with (
     patch(
       "akorin.core.components.streamable_http_client",
-      return_value=AsyncContextManagerMock((mock_read, mock_write, None), streamable_exit)
+      return_value=AsyncContextManagerMock((mock_read, mock_write, None), streamable_exit),
     ),
-    patch(
-      "akorin.core.components.ClientSession",
-      return_value=AsyncContextManagerMock(mock_session, session_exit)
-    ),
+    patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session, session_exit)),
   ):
     component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx.AsyncClient(), None)
 
@@ -309,9 +317,7 @@ async def test_component_disconnect_base_exception_handling():
 
   # Set up exit stack to fail during aclose with a BaseExceptionGroup
   mock_exit_stack = AsyncMock()
-  mock_exit_stack.aclose = AsyncMock(
-    side_effect=BaseExceptionGroup("unhandled in task group", [RuntimeError("sub-exception")])
-  )
+  mock_exit_stack.aclose = AsyncMock(side_effect=BaseExceptionGroup("unhandled in task group", [RuntimeError("sub-exception")]))
   component._exit_stack = mock_exit_stack
   component._session = MagicMock()
   component._available = True

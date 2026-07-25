@@ -95,16 +95,12 @@ class ComponentClient:
     self._exit_stack: AsyncExitStack | None = None
     self._lock = asyncio.Lock()
     self._available = False
+
     self._tools: list[MCPTool] = []
     self._resources: list[Resource] = []
     self._prompts: list[Prompt] = []
 
     self._server_info: Implementation | None = None
-    self._connected = False
-
-  @property
-  def connected(self) -> bool:
-    return self._connected
 
   async def connect(self) -> None:
     self._raise_if_circuit_open()
@@ -114,7 +110,10 @@ class ComponentClient:
         return
 
       self._exit_stack = AsyncExitStack()
-      self._connected = False
+      self._available = False
+      self._resources = []
+      self._prompts = []
+      self._tools = []
 
       try:
         read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
@@ -122,41 +121,31 @@ class ComponentClient:
         )
 
         session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
+        mcp = await session.initialize()
 
-        init_result = await session.initialize()
-        self._server_info = init_result.serverInfo
+        self._server_info = mcp.serverInfo
 
-        tools_list = await session.list_tools()
-        self._tools = []
+        if mcp.capabilities.tools:
+          mcp_tools = await session.list_tools()
 
-        for tool in tools_list.tools:
-          self._tools.append(
-            MCPTool(
-              name=tool.name,
-              description=tool.description or "",
-              input_schema=tool.inputSchema,
-              call_fn=self.call_tool,
-              service=self.name,
+          for tool in mcp_tools.tools:
+            self._tools.append(
+              MCPTool(
+                name=tool.name,
+                description=tool.description or "",
+                input_schema=tool.inputSchema,
+                call_fn=self.call_tool,
+                service=self.name,
+              )
             )
-          )
 
-        capabilities = getattr(init_result, "capabilities", None)
-        self._resources = []
+        if mcp.capabilities.resources:
+          resources_result = await session.list_resources()
+          self._resources = resources_result.resources or []
 
-        if capabilities is None or getattr(capabilities, "resources", None) is not None:
-          try:
-            resources_result = await session.list_resources()
-            self._resources = getattr(resources_result, "resources", []) or []
-          except Exception as exc:
-            logger.debug(f"Failed to list resources for component {self.name}: {exc}")
-
-        self._prompts = []
-        if capabilities is None or getattr(capabilities, "prompts", None) is not None:
-          try:
-            prompts_result = await session.list_prompts()
-            self._prompts = getattr(prompts_result, "prompts", []) or []
-          except Exception as exc:
-            logger.debug(f"Failed to list prompts for component {self.name}: {exc}")
+        if mcp.capabilities.prompts:
+          prompts_result = await session.list_prompts()
+          self._prompts = prompts_result.prompts or []
 
         self._session = session
         self._available = True
@@ -166,12 +155,10 @@ class ComponentClient:
         resource_names = ", ".join([str(r.uri) for r in self._resources])
         prompt_names = ", ".join([p.name for p in self._prompts])
 
-        logger.info(
+        logger.debug(
           f"Connected to MCP server {self.name} at {self.server_url} "
-          f"(tools: {tool_names}) (resources: {resource_names}) (prompts: {prompt_names})"
+          f"(tools: {tool_names or 'none'}) (resources: {resource_names or 'none'}) (prompts: {prompt_names or 'none'})"
         )
-
-        self._connected = True
       except Exception as exception:
         logger.error(f"Failed to connect to MCP server {self.name} at {self.server_url}: {exception}")
         self._record_failure()
@@ -180,7 +167,7 @@ class ComponentClient:
 
         raise ComponentUnavailable(self.name, str(exception)) from exception
       finally:
-        if not self._connected:
+        if not self._available:
           await self.disconnect()
 
   async def disconnect(self) -> None:
@@ -210,6 +197,7 @@ class ComponentClient:
   async def get_resources(self) -> list[Any]:
     if self._session is None:
       await self.connect()
+
     return self._resources
 
   async def read_resource(self, uri: str) -> Any:
@@ -265,7 +253,8 @@ class ComponentClient:
   async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
     self._raise_if_circuit_open()
 
-    use_cache = self.cache and not has_volatile_context(arguments)
+    use_cache = not has_volatile_context(arguments)
+    cache_key = None
 
     if use_cache:
       cache_key = self.cache.make_key(f"{self.name.value}:{name}", arguments)
@@ -285,7 +274,7 @@ class ComponentClient:
 
       self._record_success()
 
-      if use_cache:
+      if use_cache and cache_key:
         self.cache.set(cache_key, result, ttl_seconds=self.cache_ttl_seconds)
 
       return result

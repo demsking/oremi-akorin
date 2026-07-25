@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -133,10 +134,6 @@ class ListResourcesTool:
     results = []
 
     for service, handler in self.handlers.items():
-      if not handler.connected:
-        logger.warning(f"Skipping MCP Get Resources execution for service {handler.name}: component is disconnected")
-        continue
-
       try:
         resources = await handler.get_resources()
 
@@ -150,6 +147,8 @@ class ListResourcesTool:
               "mime_type": getattr(resource, "mimeType", None) or "",
             }
           )
+      except asyncio.exceptions.CancelledError:
+        logger.warning(f"Skipping list resources for {service.value}: component is not ready")
       except Exception as exception:
         logger.warning(f"Failed to list resources from {service}: {exception}")
 

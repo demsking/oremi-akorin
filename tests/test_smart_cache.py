@@ -187,11 +187,12 @@ async def test_component_cache_bypasses_serialized_volatile_context_inputs():
 
 @pytest.mark.asyncio
 async def test_component_circuit_breaker_fails_fast_after_repeated_errors():
+  cache = SmartCache(enabled=False, max_entries=10)
   component = MockCachedComponent(
     Service.OREMI_OJO,
     "https://service.example",
     httpx.AsyncClient(),
-    None,
+    cache,
     circuit_breaker_enabled=True,
     circuit_breaker_failures=2,
     circuit_breaker_cooldown_seconds=60,

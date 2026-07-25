@@ -35,6 +35,8 @@ from akorin.core.response import ProcessResponse
 from akorin.core.router import RequestRouter
 from akorin.core.router import RouteContext
 from akorin.core.router import RouteDecision
+from akorin.core.router import RoutePromptDecision
+from akorin.core.router import RouteSemanticDecision
 from akorin.core.service import Service
 from akorin.core.settings import Settings
 from akorin.core.tools import GetPromptTool
@@ -67,7 +69,7 @@ class Orchestrator:
     client: httpx.AsyncClient,
     handlers: ServiceHandlers,
     tools: ToolRegistry,
-    cache: SmartCache | None = None,
+    cache: SmartCache,
   ):
     self.settings = settings
     self.handlers = handlers
@@ -108,14 +110,12 @@ class Orchestrator:
     )
 
     for service, handler in self.handlers.items():
-      if not handler.connected:
-        logger.warning(f"Skipping MCP GetTools execution for service {service.value}: component is disconnected")
-        continue
-
       try:
         service_tools = await handler.get_tools()
 
         all_tools.extend(service_tools)
+      except asyncio.exceptions.CancelledError:
+        logger.warning(f"Could not retrieve tools for service {service}: component is not ready")
       except Exception as exception:
         logger.warning(f"Could not retrieve tools for service {service}: {exception}")
 
@@ -127,7 +127,7 @@ class Orchestrator:
     return await self.chat_tools_agent_agent.chat(message, language, request.context, tools or self.registry)
 
   def _context_for_service(self, service: Service, context: ProcessRequestContext) -> dict[str, Any]:
-    if self.cache is None or has_volatile_context(context):
+    if has_volatile_context(context):
       return context_for_service(service, context)
 
     cache_key = self.cache.make_key("context", {"service": service.value, "context": context})
@@ -149,16 +149,14 @@ class Orchestrator:
     prompt_to_service = {}
 
     async def fetch_for_service(service: Service, handler: "ComponentClient") -> tuple[Service, list[Any]]:
-      if not handler.connected:
-        logger.warning(f"[{request_id}] Skipping prompt discovery for {service.value}: component is disconnected")
-
-        return service, []
-
       try:
         prompts = await handler.get_prompts()
         logger.info(f"[{request_id}] Fetched {len(prompts)} prompts from {service.value}")
 
         return service, prompts
+      except asyncio.exceptions.CancelledError:
+        logger.warning(f"[{request_id}] Skipping prompt discovery for {service.value}: component is not ready")
+        return service, []
       except Exception as exception:
         logger.warning(f"[{request_id}] Failed to retrieve prompts for service {service}: {exception}")
         return service, []
@@ -200,7 +198,7 @@ class Orchestrator:
 
     # 1. Pipeline Routing Execution
     logger.debug(f"[{request_id}] Initiating routing pipeline")
-    decision = None
+    decision: RouteDecision | None = None
 
     for router in self.routers:
       decision = await router.route(route_context)
@@ -211,11 +209,7 @@ class Orchestrator:
 
     if not decision:
       logger.info(f"[{request_id}] No route found in pipeline, defaulting to UNKNOWN")
-      decision = RouteDecision(service=Service.UNKNOWN, confidence=0.0, source="unknown")
-
-    if decision.direct_response:
-      logger.debug(f"[{request_id}] Returning early for direct device response")
-      return decision.direct_response
+      decision = RouteSemanticDecision(service=Service.CHAT, confidence=0.0)
 
     # 2. Service Dispatching
     logger.debug(f"[{request_id}] Proceeding to execute service logic for {decision.service.value}")
@@ -244,7 +238,7 @@ class Orchestrator:
 
     logger.info(
       f"[{request_id}] Processing completed: ok={response.ok} "
-      f"service={response.service.value} router={decision.source} "
+      f"service={response.service.value} router={decision} "
       f"confidence={response.confidence:.2f} "
       f"duration_ms={(perf_counter() - processing_started) * 1000:.1f}"
     )
@@ -300,10 +294,6 @@ class Orchestrator:
       logger.error(f"[{request_id}] Configuration error: No handler found for {decision.service.value}")
       raise ComponentUnavailable(decision.service, "component is not configured")
 
-    if not handler.connected:
-      logger.warning(f"[{request_id}] Skipping MCP execution for service {decision.service}: component is disconnected")
-      raise ComponentUnavailable(decision.service, "component is unavailable")
-
     dispatch_started = perf_counter()
     request.context = self._context_for_service(decision.service, request.context)
     tools_list = await handler.get_tools()
@@ -327,26 +317,14 @@ class Orchestrator:
     message_to_send = request.message
 
     try:
-      selected = decision.selected_prompt
+      if isinstance(decision, RoutePromptDecision) and decision.selected_prompt.name:
+        logger.debug(f"[{request_id}] Rendering prompt: {decision.selected_prompt.name}")
 
-      if not (selected and selected.name and prompt_to_service.get(selected.name) == decision.service):
-        logger.debug(f"[{request_id}] Re-evaluating prompts specific to {decision.service.value}")
-
-        prompts = await handler.get_prompts()
-        selected = await self.prompt_selector_agent_agent.select_prompt(request.message, prompts) if prompts else None
-
-      if selected and selected.name:
-        logger.debug(f"[{request_id}] Rendering prompt: {selected.name}")
-
-        rendered = await handler.get_prompt(selected.name, selected.arguments)
+        rendered = await handler.get_prompt(decision.selected_prompt.name, decision.selected_prompt.arguments)
         prompt_messages = []
 
         for msg in rendered.messages:
-          content_text = ""
-          content = msg.content
-          content_text = content.text if hasattr(content, "text") else str(content)
-
-          prompt_messages.append(content_text)
+          prompt_messages.append(msg.content.text)
 
         if prompt_messages:
           message_to_send = "\n\n".join(prompt_messages)
@@ -358,8 +336,8 @@ class Orchestrator:
     logger.debug(f"[{request_id}] Initiating chat_with_tools for {decision.service.value}")
 
     chat_result = await self._chat_with_tools(message_to_send, request, language, tools=component_tools)
-
     data = {}
+
     if chat_result.tools:
       logger.debug(f"[{request_id}] Executed tools: {[t.name for t in chat_result.tools]}")
       primary_tool = next(

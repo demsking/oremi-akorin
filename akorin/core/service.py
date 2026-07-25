@@ -24,4 +24,3 @@ class Service(StrEnum):
   OREMI_ISAKOSO = "isakoso"
   TOOL = "tool"
   CHAT = "chat"
-  UNKNOWN = "unknown"
