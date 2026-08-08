@@ -26,7 +26,6 @@ FROM python:3.12-alpine3.21
 # Set the shell to /bin/ash and enable pipefail
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 
-RUN apk add --no-cache curl
 RUN adduser -D -h /oremi oremi && mkdir -p /oremi/data
 
 WORKDIR /oremi
@@ -49,6 +48,7 @@ VOLUME /oremi/data
 
 EXPOSE 5020
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 CMD prefix="${OREMI_AKORIN_API_PREFIX:-/}"; prefix="/${prefix#/}"; prefix="${prefix%/}"; curl -fsS "http://127.0.0.1:${OREMI_AKORIN_SERVER_PORT:-5040}${prefix}/health/" || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD python -c "import urllib.request; prefix='${OREMI_AKORIN_API_PREFIX}'.strip('/'); url=f'http://localhost:${OREMI_AKORIN_SERVER_PORT}/' + (prefix + '/' if prefix else '') + 'health/'; urllib.request.urlopen(url)" || exit 1
 
 CMD ["python", "/oremi/akorin"]

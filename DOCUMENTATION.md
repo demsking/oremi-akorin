@@ -85,7 +85,7 @@ Docker image is officially available on Docker Hub, supporting both
 `linux/amd64` and `linux/arm64` platforms. The image exposes port `5020`, which
 serves the REST API and the interactive documentation.
 
-The interactive documentation can be accessed at `http://localhost:5020/docs`
+The interactive documentation can be accessed at `http://localhost:5020/docs/`
 and allows testing available endpoints directly from the browser.
 
 ### Volumes

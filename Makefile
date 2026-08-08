@@ -116,7 +116,7 @@ image-test:
 	  --tag $(IMAGE_NAME):test
 
 live: image-test
-	docker run -it --rm --env-file .env.example -v ./data:/oremi/data --network host --device /dev/snd:/dev/snd --group-add audio $(IMAGE_NAME):test
+	docker run -it --rm --env-file .env.example -v ./data:/oremi/data --network host $(IMAGE_NAME):test
 
 check-clean:
 	@test -z "$$(git status --porcelain)" || (echo "Working tree is not clean" && exit 1)

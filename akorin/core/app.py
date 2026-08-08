@@ -44,6 +44,7 @@ from akorin.core.package import APP_DESCRIPTION
 from akorin.core.package import APP_NAME
 from akorin.core.package import APP_VERSION
 from akorin.core.service import Service
+from akorin.core.settings import log_group
 from akorin.core.settings import Settings
 from akorin.core.tools import ToolRegistry
 from akorin.tools.calculator_tool import CalculatorTool
@@ -69,53 +70,53 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
 
     logger.info(f"{APP_NAME} v{APP_VERSION}")
     logger.info(f"Server: http://{settings.server_host}:{settings.server_port}")
-    logger.info(f"API Docs: http://{settings.server_host}:{settings.server_port}/docs")
+    logger.info(f"API Docs: http://{settings.server_host}:{settings.server_port}/docs/")
     logger.info(f"Components: endpoints={service_endpoints}")
 
-    logger.info(
-      "App settings [server]: host=%s port=%s api_prefix=%s", settings.server_host, settings.server_port, settings.api_prefix
+    log_group(settings, "Server", "server_host", "server_port", "api_prefix")
+    log_group(
+      settings,
+      "LLM",
+      "llm_model",
+      "llm_request_timeout",
+      "llm_temperature",
+      "llm_max_response_tokens",
+      "llm_system_prompt",
+      "ollama_base_url",
     )
 
-    logger.info(
-      "App settings [generation]: llm_request_timeout=%s temperature=%s llm_max_response_tokens=%s system_prompt=%s",
-      settings.llm_request_timeout,
-      settings.llm_temperature,
-      settings.llm_max_response_tokens,
-      settings.llm_system_prompt.replace("\n", " ").strip(),
+    log_group(
+      settings,
+      "Components",
+      "isinmi_url",
+      "ojo_url",
+      "rediyo_url",
+      "kansa_url",
+      "isakoso_url",
     )
 
-    logger.info(
-      "App settings [ollama]: model=%s base_url=%s",
-      settings.llm_model,
-      safe_url(settings.ollama_base_url_string if settings.ollama_base_url is not None else None),
+    log_group(settings, "Logging", "log_level", "log_file")
+    log_group(
+      settings,
+      "Smart Cache",
+      "llm_cache_enabled",
+      "llm_cache_max_entries",
+      "llm_cache_ttl_seconds",
+      "component_cache_ttl_seconds",
     )
 
-    logger.info(
-      "App settings [components]: isinmi=%s weather=%s rediyo=%s kansa=%s",
-      safe_url(settings.isinmi_url),
-      safe_url(settings.ojo_url),
-      safe_url(settings.rediyo_url),
-      safe_url(settings.kansa_url),
-    )
-
-    logger.info("App settings [logging]: level=%s destination=%s", settings.log_level, settings.log_file or "stderr")
-
-    logger.info(
-      "App settings [smart_cache]: enabled=%s max_entries=%s llm_ttl_seconds=%s component_ttl_seconds=%s",
-      settings.llm_cache_enabled,
-      settings.llm_cache_max_entries,
-      settings.llm_cache_ttl_seconds,
-      settings.component_cache_ttl_seconds,
-    )
-
-    logger.info(
-      "App settings [performance]: request_budget=%ss spellcheck_timeout=%ss route_timeout=%ss http_request_timeout=%ss component_stale=%ss circuit_breaker=%s",
-      settings.request_budget_seconds,
-      settings.spellcheck_timeout_seconds,
-      settings.route_timeout_seconds,
-      settings.http_request_timeout,
-      settings.component_cache_stale_seconds,
-      settings.component_circuit_breaker_enabled,
+    log_group(
+      settings,
+      "Performance",
+      "request_budget_seconds",
+      "spellcheck_timeout_seconds",
+      "route_timeout_seconds",
+      "skip_spellcheck_max_chars",
+      "http_request_timeout",
+      "component_cache_stale_seconds",
+      "component_circuit_breaker_enabled",
+      "component_circuit_breaker_failures",
+      "component_circuit_breaker_cooldown_seconds",
     )
 
     if settings.should_use_ollama:
@@ -198,6 +199,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
         logger.warning("Oremi Akọrin startup aborted; cleaning up resources")
 
       retry_stop.set()
+
       if retry_task is not None:
         await retry_task
 
@@ -238,7 +240,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
 
   @app.get("/", include_in_schema=False)
   async def redirect_to_docs() -> HTMLResponse:
-    return HTMLResponse(status_code=307, headers={"Location": prefix + docs.router.prefix})
+    return HTMLResponse(status_code=307, headers={"Location": prefix + docs.router.prefix + "/"})
 
   prefix = "" if settings.api_prefix == "/" else settings.api_prefix
   api_prefix = f"{prefix}/api"

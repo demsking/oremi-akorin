@@ -79,10 +79,10 @@ def ollama_handler(request: httpx.Request) -> httpx.Response:
 @pytest.mark.asyncio
 async def test_process_endpoint(monkeypatch):
   class FakeTool:
-    def __init__(self, name, description, inputSchema):
+    def __init__(self, name, description, input_schema):
       self.name = name
       self.description = description
-      self.inputSchema = inputSchema
+      self.input_schema = input_schema
 
   class FakeToolsList:
     def __init__(self, tools):
@@ -119,7 +119,7 @@ async def test_process_endpoint(monkeypatch):
 
   mock_session = AsyncMock()
   mock_init_result = type(
-    "FakeInitResult", (), {"serverInfo": FakeServerInfo("oremi-weather", "1.2.3"), "capabilities": FakeCapabilities(tools=True)}
+    "FakeInitResult", (), {"server_info": FakeServerInfo("oremi-weather", "1.2.3"), "capabilities": FakeCapabilities(tools=True)}
   )()
   mock_session.initialize = AsyncMock(return_value=mock_init_result)
   mock_session.list_tools = AsyncMock(

@@ -15,7 +15,7 @@
 from abc import ABC
 from abc import abstractmethod
 
-from mcp.types import Prompt
+from mcp_types import Prompt
 from pydantic import BaseModel
 from pydantic import Field
 

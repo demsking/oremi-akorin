@@ -37,3 +37,14 @@ def test_configure_logging_suppresses_watchfiles_noise():
     root.setLevel(original_level)
     watchfiles_logger.setLevel(original_watchfiles_level)
     watchfiles_main_logger.setLevel(original_watchfiles_main_level)
+
+
+def test_log_group(caplog):
+  from akorin.core.settings import Settings, log_group
+
+  settings = Settings()
+  with caplog.at_level(logging.INFO, logger="akorin.core.settings"):
+    log_group(settings, "Server", "server_host", "server_port")
+
+  assert "Server Settings: server_host=127.0.0.1 server_port=5020" in caplog.text
+

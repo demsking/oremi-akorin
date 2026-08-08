@@ -17,15 +17,12 @@ import logging
 from contextlib import AsyncExitStack
 from time import monotonic
 from typing import Any
-from typing import cast
-
 import httpx
 from mcp import ClientSession
 from mcp import Resource
 from mcp.client.streamable_http import streamable_http_client
-from mcp.types import Implementation
-from mcp.types import Prompt
-from pydantic import AnyUrl
+from mcp_types import Implementation
+from mcp_types import Prompt
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
@@ -116,14 +113,14 @@ class ComponentClient:
       self._tools = []
 
       try:
-        read_stream, write_stream, _ = await self._exit_stack.enter_async_context(
+        read_stream, write_stream = await self._exit_stack.enter_async_context(
           streamable_http_client(self.server_url, http_client=self.client)
         )
 
         session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
         mcp = await session.initialize()
 
-        self._server_info = mcp.serverInfo
+        self._server_info = mcp.server_info
 
         if mcp.capabilities.tools:
           mcp_tools = await session.list_tools()
@@ -133,7 +130,7 @@ class ComponentClient:
               MCPTool(
                 name=tool.name,
                 description=tool.description or "",
-                input_schema=tool.inputSchema,
+                input_schema=tool.input_schema,
                 call_fn=self.call_tool,
                 service=self.name,
               )
@@ -159,6 +156,10 @@ class ComponentClient:
           f"Connected to MCP server {self.name} at {self.server_url} "
           f"(tools: {tool_names or 'none'}) (resources: {resource_names or 'none'}) (prompts: {prompt_names or 'none'})"
         )
+      except asyncio.CancelledError:
+        self._record_failure()
+        self._available = False
+        raise
       except Exception as exception:
         logger.error(f"Failed to connect to MCP server {self.name} at {self.server_url}: {exception}")
         self._record_failure()
@@ -210,7 +211,7 @@ class ComponentClient:
       if self._session is None:
         raise ComponentUnavailable(self.name, "Failed to establish MCP session")
 
-      result = await self._session.read_resource(cast(AnyUrl, uri))
+      result = await self._session.read_resource(uri)
 
       self._record_success()
 

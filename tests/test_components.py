@@ -32,10 +32,10 @@ from tests.test_smart_cache import SmartCache
 
 
 class FakeTool:
-  def __init__(self, name, description, inputSchema):
+  def __init__(self, name, description, input_schema):
     self.name = name
     self.description = description
-    self.inputSchema = inputSchema
+    self.input_schema = input_schema
 
 
 class FakeToolsList:
@@ -73,7 +73,7 @@ async def test_component_mcp_client_workflow(component_type, name, url, caplog):
   mock_write = MagicMock()
 
   mock_session = AsyncMock()
-  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo(name.value, "1.4.0"), "capabilities": FakeCapabilities(tools=True)})()
+  mock_init_result = type("FakeInitResult", (), {"server_info": FakeServerInfo(name.value, "1.4.0"), "capabilities": FakeCapabilities(tools=True)})()
   mock_session.initialize = AsyncMock(return_value=mock_init_result)
   mock_session.list_tools = AsyncMock(return_value=FakeToolsList([FakeTool("do_action", "Do some action", {"type": "object"})]))
   mock_session.call_tool = AsyncMock(return_value="tool_call_result")
@@ -170,7 +170,7 @@ async def test_component_reconnects_on_ping_failure():
   mock_write = MagicMock()
 
   mock_session = AsyncMock()
-  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo("test_service", "1.4.0"), "capabilities": FakeCapabilities(tools=True)})()
+  mock_init_result = type("FakeInitResult", (), {"server_info": FakeServerInfo("test_service", "1.4.0"), "capabilities": FakeCapabilities(tools=True)})()
   mock_session.initialize = AsyncMock(return_value=mock_init_result)
 
   # Initial tools
@@ -227,7 +227,7 @@ async def test_component_disconnects_on_call_tool_failure():
   mock_write = MagicMock()
 
   mock_session = AsyncMock()
-  mock_init_result = type("FakeInitResult", (), {"serverInfo": FakeServerInfo("test_service", "1.4.0"), "capabilities": FakeCapabilities(tools=True)})()
+  mock_init_result = type("FakeInitResult", (), {"server_info": FakeServerInfo("test_service", "1.4.0"), "capabilities": FakeCapabilities(tools=True)})()
   mock_session.initialize = AsyncMock(return_value=mock_init_result)
   mock_session.list_tools = AsyncMock(return_value=FakeToolsList([]))
   mock_session.call_tool = AsyncMock(side_effect=RuntimeError("connection error"))

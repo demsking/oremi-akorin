@@ -144,7 +144,7 @@ class ListResourcesTool:
               "uri": str(resource.uri),
               "name": resource.name,
               "description": getattr(resource, "description", None) or "",
-              "mime_type": getattr(resource, "mimeType", None) or "",
+              "mime_type": getattr(resource, "mime_type", None) or "",
             }
           )
       except asyncio.exceptions.CancelledError:

@@ -17,9 +17,8 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import httpx
-import mcp.types as t
+import mcp_types as t
 import pytest
-from pydantic import AnyUrl
 
 from akorin.components.ojo import OjoClient
 from akorin.core.service import Service
@@ -60,14 +59,14 @@ async def test_component_client_discovers_resources_and_prompts():
 
   # Set up capabilities
   capabilities = t.ServerCapabilities(
-    resources=t.ResourcesCapability(subscribe=True, listChanged=True),
-    prompts=t.PromptsCapability(listChanged=True),
+    resources=t.ResourcesCapability(subscribe=True, list_changed=True),
+    prompts=t.PromptsCapability(list_changed=True),
   )
   mock_init_result = type(
     "FakeInitResult",
     (),
     {
-      "serverInfo": FakeServerInfo("weather", "1.4.0"),
+      "server_info": FakeServerInfo("weather", "1.4.0"),
       "capabilities": capabilities,
     },
   )()
@@ -78,10 +77,10 @@ async def test_component_client_discovers_resources_and_prompts():
 
   # Resources
   mock_resource = t.Resource(
-    uri=AnyUrl("device://list"),
+    uri="device://list",
     name="Device List",
     description="All smart devices",
-    mimeType="application/json",
+    mime_type="application/json",
   )
   mock_session.list_resources = AsyncMock(return_value=t.ListResourcesResult(resources=[mock_resource]))
 
@@ -117,7 +116,7 @@ async def test_component_client_discovers_resources_and_prompts():
     assert len(prompts) == 1
 
     # Read Resource
-    text_content = t.TextResourceContents(uri=AnyUrl("device://list"), text='{"ok": true}')
+    text_content = t.TextResourceContents(uri="device://list", text='{"ok": true}')
     mock_session.read_resource = AsyncMock(return_value=t.ReadResourceResult(contents=[text_content]))
     read_res = await component.read_resource("device://list")
     assert read_res.contents[0].text == '{"ok": true}'
@@ -144,10 +143,10 @@ async def test_resource_and_prompt_tools_execution():
     def __init__(self):
       self.resources = [
         t.Resource(
-          uri=AnyUrl("device://list"),
+          uri="device://list",
           name="Device List",
           description="All smart devices",
-          mimeType="application/json",
+          mime_type="application/json",
         )
       ]
       self.prompts = [
@@ -164,7 +163,7 @@ async def test_resource_and_prompt_tools_execution():
 
     async def read_resource(self, uri):
       if uri == "device://list":
-        return t.ReadResourceResult(contents=[t.TextResourceContents(uri=AnyUrl(uri), text='{"ok": true}')])
+        return t.ReadResourceResult(contents=[t.TextResourceContents(uri=uri, text='{"ok": true}')])
       raise ValueError("not found")
 
     async def get_prompts(self):

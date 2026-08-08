@@ -25,7 +25,8 @@ dependencies = [
   "pydantic-settings>=2.14.2",
   "pydantic-ai>=2.5.0",
   "ollama>=0.6.2",
-  "mcp>=1.28.1",
+  "mcp>=2.0.0",
+  "mcp-types>=2.0.0",
   "py3langid>=0.3.0",
 ]
 

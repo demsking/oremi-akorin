@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from mcp.types import Prompt
+from mcp_types import Prompt
 from pydantic import BaseModel
 from pydantic import Field
 from pydantic_ai import ModelSettings
