@@ -113,9 +113,8 @@ class ComponentClient:
       self._tools = []
 
       try:
-        read_stream, write_stream = await self._exit_stack.enter_async_context(
-          streamable_http_client(self.server_url, http_client=self.client)
-        )
+        streams = await self._exit_stack.enter_async_context(streamable_http_client(self.server_url, http_client=self.client))
+        read_stream, write_stream = streams[0], streams[1]
 
         session = await self._exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
         mcp = await session.initialize()

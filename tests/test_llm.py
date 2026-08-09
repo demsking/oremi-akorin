@@ -94,6 +94,7 @@ async def test_command_agent_classifies_all_payload_examples(monkeypatch):
     "Contrôler un appareil Zigbee (FR)": Service.OREMI_ISAKOSO,
     "Allumer la lumière de la chambre (FR)": Service.OREMI_ISAKOSO,
     "Éteindre la lumière de la chambre (FR)": Service.OREMI_ISAKOSO,
+    "Quelle heure est-il ? (FR)": Service.CHAT,
     "General Chat (EN)": Service.CHAT,
     "Discussion générale (FR)": Service.CHAT,
     "reminder": Service.OREMI_ISINMI,

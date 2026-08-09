@@ -154,6 +154,16 @@ PAYLOAD_EXAMPLES: dict[str, Example] = {
     ),
   },
   # --- CHAT ---
+  "Quelle heure est-il ? (FR)": {
+    "summary": "Quelle heure est-il ? (FR)",
+    "description": "Envoi d'une commande vocale ou textuelle pour connaitre l'heure.",
+    "value": ProcessRequest.model_validate(
+      {
+        "message": "Quelle heure est-il ?",
+        "context": OREMI_DEVICE_PREFERENCES_EXAMPLE,
+      }
+    ),
+  },
   "General Chat (EN)": {
     "summary": "Chitchat / Assistant interaction (EN)",
     "description": "A casual or open-ended conversation scenario handled by the LLM core.",

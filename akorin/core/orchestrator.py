@@ -48,6 +48,7 @@ from akorin.core.tools import ReadResourceTool
 from akorin.core.tools import ToolRegistry
 from akorin.routers.mcp_router import McpPromptRouter
 from akorin.routers.semantic_router import SemanticRouter
+from akorin.routers.spacy_router import SpacyRouter
 from akorin.utils.cache import has_volatile_context
 from akorin.utils.cache import SmartCache
 from akorin.utils.language import detect_language
@@ -84,6 +85,7 @@ class Orchestrator:
 
     # Initialize Routing Chain
     self.routers: list[RequestRouter] = [
+      SpacyRouter(),
       McpPromptRouter(self.prompt_selector_agent_agent),
       SemanticRouter(self.command_agent, lambda started: self._timeout_for(started, self.settings.route_timeout_seconds)),
     ]

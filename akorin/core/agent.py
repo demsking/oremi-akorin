@@ -162,9 +162,12 @@ class AgentClient(Generic[OutputModel], ABC):
       },
     )
 
-  async def _execute_with_cache(self, cache_key: str | None, executor: Callable[[], Awaitable[T]]) -> T:
+  async def _execute_with_cache(
+    self, cache_key: str | None, executor: Callable[[], Awaitable[T]], ttl_seconds: float | None = None
+  ) -> T:
     if self.cache and cache_key:
-      return await self.cache.get_or_set(cache_key, self.settings.llm_cache_ttl_seconds, executor)
+      ttl = ttl_seconds if ttl_seconds is not None else self.settings.llm_cache_ttl_seconds
+      return await self.cache.get_or_set(cache_key, ttl, executor)
     return await executor()
 
   def _ollama_options(self) -> dict[str, Any]:
@@ -177,7 +180,7 @@ class AgentClient(Generic[OutputModel], ABC):
       options["num_predict"] = tokens
     return options
 
-  async def _run_ollama(self, prompt: str, system_prompt: str) -> Any:
+  async def _run_ollama(self, prompt: str, system_prompt: str, ttl_seconds: float | None = None) -> Any:
     messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}]
     options = self._ollama_options()
     cache_key = self._cache_key(prompt, system_prompt=system_prompt, output_type=self.RESULT_TYPE)
@@ -202,28 +205,28 @@ class AgentClient(Generic[OutputModel], ABC):
 
       return content
 
-    return await self._execute_with_cache(cache_key, executor)
+    return await self._execute_with_cache(cache_key, executor, ttl_seconds=ttl_seconds)
 
-  async def _run_agent(self, prompt: str, system_prompt: str) -> OutputModel:
+  async def _run_agent(self, prompt: str, system_prompt: str, ttl_seconds: float | None = None) -> OutputModel:
     agent = self._create_agent(system_prompt=system_prompt)
-    cache_key = self._cache_key(prompt, system_prompt=system_prompt, output_type=None)
+    cache_key = self._cache_key(prompt, system_prompt=system_prompt, output_type=self.RESULT_TYPE)
 
     async def executor() -> OutputModel:
       result = await agent.run(prompt)
       return self._parse_output(result.output)
 
-    return await self._execute_with_cache(cache_key, executor)
+    return await self._execute_with_cache(cache_key, executor, ttl_seconds=ttl_seconds)
 
-  async def _run(self, prompt: str, *, system_prompt: str | None = None) -> OutputModel:
+  async def _run(self, prompt: str, *, system_prompt: str | None = None, ttl_seconds: float | None = None) -> OutputModel:
     """Unified, secure entrypoint for all non-tool LLM executions."""
     sys_prompt = system_prompt or self._get_system_prompt()
 
     if self.settings.should_use_ollama:
-      output = await self._run_ollama(prompt, system_prompt=sys_prompt)
+      output = await self._run_ollama(prompt, system_prompt=sys_prompt, ttl_seconds=ttl_seconds)
 
       return self._parse_output(cast(OutputModel, output))
 
-    return await self._run_agent(prompt, system_prompt=sys_prompt)
+    return await self._run_agent(prompt, system_prompt=sys_prompt, ttl_seconds=ttl_seconds)
 
   async def _run_with_tools(
     self,
