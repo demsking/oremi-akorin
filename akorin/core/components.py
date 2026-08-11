@@ -17,7 +17,8 @@ import logging
 from contextlib import AsyncExitStack
 from time import monotonic
 from typing import Any
-import httpx
+
+import httpx2
 from mcp import ClientSession
 from mcp import Resource
 from mcp.client.streamable_http import streamable_http_client
@@ -67,7 +68,7 @@ class ComponentClient:
     self,
     name: Service,
     url: str,
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     cache: SmartCache,
     *,
     cache_ttl_seconds: float = 60.0,

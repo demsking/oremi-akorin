@@ -1543,7 +1543,7 @@ version = "1.0.0b14"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
-    { name = "httpx" },
+    { name = "httpx2" },
     { name = "mcp" },
     { name = "mcp-types" },
     { name = "ollama" },
@@ -1568,7 +1568,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115.0,<1.0.0" },
-    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "httpx2", specifier = ">=2.5.0" },
     { name = "mcp", specifier = ">=2.0.0" },
     { name = "mcp-types", specifier = ">=2.0.0" },
     { name = "ollama", specifier = ">=0.6.2" },

@@ -18,7 +18,7 @@ import logging
 from time import perf_counter
 from typing import Callable
 
-import httpx
+import httpx2
 
 from akorin.agents.command_agent import CommandAgent
 from akorin.core.router import RequestRouter
@@ -51,6 +51,6 @@ class SemanticRouter(RequestRouter):
       )
       return RouteSemanticDecision(service=decision.service, confidence=decision.confidence)
 
-    except (asyncio.TimeoutError, httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exception:
+    except (asyncio.TimeoutError, httpx2.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exception:
       logger.warning(f"[{context.request_id}] SemanticRouter failed: {exception}")
       return None

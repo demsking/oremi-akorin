@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-import httpx
+import httpx2
 import pytest
 from pydantic import BaseModel
 
@@ -92,7 +92,7 @@ async def test_component_mcp_client_workflow(component_type, name, url, caplog):
     patch("akorin.core.components.streamable_http_client", return_value=AsyncContextManagerMock((mock_read, mock_write, None))),
     patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session)),
   ):
-    component = component_type(name, url, httpx.AsyncClient(), cache)
+    component = component_type(name, url, httpx2.AsyncClient(), cache)
 
     # 1. Test connect
     import logging
@@ -191,7 +191,7 @@ async def test_component_reconnects_on_ping_failure():
     patch("akorin.core.components.streamable_http_client", return_value=AsyncContextManagerMock((mock_read, mock_write, None))),
     patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session)),
   ):
-    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx.AsyncClient(), SmartCache(enabled=False, max_entries=10))
+    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx2.AsyncClient(), SmartCache(enabled=False, max_entries=10))
 
     # 1. Connect first time
     await component.connect()
@@ -246,7 +246,7 @@ async def test_component_disconnects_on_call_tool_failure():
     patch("akorin.core.components.streamable_http_client", return_value=AsyncContextManagerMock((mock_read, mock_write, None))),
     patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session)),
   ):
-    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx.AsyncClient(), SmartCache(enabled=False, max_entries=10))
+    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx2.AsyncClient(), SmartCache(enabled=False, max_entries=10))
 
     # 1. Connect
     await component.connect()
@@ -299,7 +299,7 @@ async def test_component_connect_cancellation_cleanup():
     ),
     patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session, session_exit)),
   ):
-    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx.AsyncClient(), None)
+    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx2.AsyncClient(), None)
 
     with pytest.raises(asyncio.CancelledError):
       await component.connect()
@@ -313,7 +313,7 @@ async def test_component_connect_cancellation_cleanup():
 
 @pytest.mark.asyncio
 async def test_component_disconnect_base_exception_handling():
-  component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx.AsyncClient(), None)
+  component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx2.AsyncClient(), None)
 
   # Set up exit stack to fail during aclose with a BaseExceptionGroup
   mock_exit_stack = AsyncMock()

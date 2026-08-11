@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-import httpx
+import httpx2
 import mcp_types as t
 import pytest
 
@@ -98,7 +98,7 @@ async def test_component_client_discovers_resources_and_prompts():
     patch("akorin.core.components.streamable_http_client", return_value=AsyncContextManagerMock((mock_read, mock_write, None))),
     patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session)),
   ):
-    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx.AsyncClient(), None)
+    component = OjoClient(Service.OREMI_OJO, "http://weather.test", httpx2.AsyncClient(), None)
 
     # Connect
     await component.connect()

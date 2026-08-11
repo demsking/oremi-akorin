@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-import httpx
+import httpx2
 import pytest
 from pydantic_ai.models.test import TestModel
 
@@ -40,13 +40,13 @@ def isolated_settings(**overrides) -> Settings:
   return Settings(**values)
 
 
-def ollama_handler(request: httpx.Request) -> httpx.Response:
+def ollama_handler(request: httpx2.Request) -> httpx2.Response:
   if request.url.path == "/api/tags":
-    return httpx.Response(200, json={"models": [{"name": "qwen2.5:3b"}]})
+    return httpx2.Response(200, json={"models": [{"name": "qwen2.5:3b"}]})
   if request.url.path == "/api/generate":
-    return httpx.Response(200, json={"response": '{"service":"ojo","confidence":0.95}'})
+    return httpx2.Response(200, json={"response": '{"service":"ojo","confidence":0.95}'})
   if request.url.path == "/health/":
-    return httpx.Response(
+    return httpx2.Response(
       200,
       json={
         "status": "healthy",
@@ -61,7 +61,7 @@ def ollama_handler(request: httpx.Request) -> httpx.Response:
     body = json.loads(request.read())
     messages = body.get("messages", [])
     if messages and messages[-1].get("role") == "user":
-      return httpx.Response(
+      return httpx2.Response(
         200,
         json={
           "message": {
@@ -72,8 +72,8 @@ def ollama_handler(request: httpx.Request) -> httpx.Response:
         },
       )
     else:
-      return httpx.Response(200, json={"message": {"role": "assistant", "content": "22°C and sunny"}})
-  return httpx.Response(200, json={"message": "ok"})
+      return httpx2.Response(200, json={"message": {"role": "assistant", "content": "22°C and sunny"}})
+  return httpx2.Response(200, json={"message": "ok"})
 
 
 @pytest.mark.asyncio
@@ -146,11 +146,11 @@ async def test_process_endpoint(monkeypatch):
     patch("akorin.core.components.streamable_http_client", return_value=AsyncContextManagerMock((mock_read, mock_write, None))),
     patch("akorin.core.components.ClientSession", return_value=AsyncContextManagerMock(mock_session)),
   ):
-    service_client = httpx.AsyncClient(transport=httpx.MockTransport(ollama_handler))
+    service_client = httpx2.AsyncClient(transport=httpx2.MockTransport(ollama_handler))
     app = create_app(isolated_settings(ojo_url="http://weather.test"), service_client)
     async with app.router.lifespan_context(app):
-      transport = httpx.ASGITransport(app=app)
-      async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+      transport = httpx2.ASGITransport(app=app)
+      async with httpx2.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
           "/api/agent/",
           json={"text": "Weather in Paris", "context": {"route_to": "ojo"}},
@@ -163,17 +163,17 @@ async def test_process_endpoint(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_validation_rejects_blank_input():
-  service_client = httpx.AsyncClient(transport=httpx.MockTransport(ollama_handler))
+  service_client = httpx2.AsyncClient(transport=httpx2.MockTransport(ollama_handler))
   app = create_app(isolated_settings(), service_client)
   async with app.router.lifespan_context(app):
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+    async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=app), base_url="http://test") as client:
       response = await client.post("/api/agent/", json={"text": "  "})
   assert response.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_startup_and_shutdown_emit_operational_logs(caplog):
-  service_client = httpx.AsyncClient(transport=httpx.MockTransport(ollama_handler))
+  service_client = httpx2.AsyncClient(transport=httpx2.MockTransport(ollama_handler))
   app = create_app(isolated_settings(), service_client)
 
   with caplog.at_level(logging.INFO, logger="oremi-akorin"):
@@ -183,20 +183,20 @@ async def test_startup_and_shutdown_emit_operational_logs(caplog):
 
 @pytest.mark.asyncio
 async def test_startup_marks_unreachable_component_as_unavailable():
-  def unreachable_handler(request: httpx.Request) -> httpx.Response:
+  def unreachable_handler(request: httpx2.Request) -> httpx2.Response:
     if request.url.path == "/api/tags":
-      return httpx.Response(200, json={"models": [{"name": "qwen2.5:3b"}]})
-    raise httpx.ConnectError("connection refused")
+      return httpx2.Response(200, json={"models": [{"name": "qwen2.5:3b"}]})
+    raise httpx2.ConnectError("connection refused")
 
-  service_client = httpx.AsyncClient(transport=httpx.MockTransport(unreachable_handler))
+  service_client = httpx2.AsyncClient(transport=httpx2.MockTransport(unreachable_handler))
   app = create_app(
     isolated_settings(ojo_url="http://weather.test"),
     service_client,
   )
 
   async with app.router.lifespan_context(app):
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+    transport = httpx2.ASGITransport(app=app)
+    async with httpx2.AsyncClient(transport=transport, base_url="http://test") as client:
       response = await client.get("/health/")
 
   assert response.status_code == 200
@@ -209,12 +209,12 @@ async def test_startup_marks_unreachable_component_as_unavailable():
 async def test_startup_marks_invalid_component_service_info_as_unavailable():
   from unittest.mock import patch
 
-  def invalid_info_handler(request: httpx.Request) -> httpx.Response:
+  def invalid_info_handler(request: httpx2.Request) -> httpx2.Response:
     if request.url.path == "/api/server":
-      return httpx.Response(200, json={"name": "oremi-weather"})
-    return httpx.Response(200, json={"models": []})
+      return httpx2.Response(200, json={"name": "oremi-weather"})
+    return httpx2.Response(200, json={"models": []})
 
-  service_client = httpx.AsyncClient(transport=httpx.MockTransport(invalid_info_handler))
+  service_client = httpx2.AsyncClient(transport=httpx2.MockTransport(invalid_info_handler))
 
   from contextlib import asynccontextmanager
 
@@ -230,8 +230,8 @@ async def test_startup_marks_invalid_component_service_info_as_unavailable():
     )
 
     async with app.router.lifespan_context(app):
-      transport = httpx.ASGITransport(app=app)
-      async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+      transport = httpx2.ASGITransport(app=app)
+      async with httpx2.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/health/")
 
   assert response.status_code == 200

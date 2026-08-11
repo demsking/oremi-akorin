@@ -20,7 +20,7 @@ from typing import Awaitable
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-import httpx
+import httpx2
 
 from akorin.agents.chat_agent import ChatAgent
 from akorin.agents.chat_tools_agent import ChatToolsAgent
@@ -66,7 +66,7 @@ class Orchestrator:
   def __init__(
     self,
     settings: Settings,
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     handlers: ServiceHandlers,
     tools: ToolRegistry,
     cache: SmartCache,
@@ -409,7 +409,7 @@ class Orchestrator:
         "message": chat_result.message,
         "data": data,
       }
-    except httpx.HTTPError as nested_exception:
+    except httpx2.HTTPError as nested_exception:
       logger.error(f"[{request_id}] Fallback chat flow also failed: {nested_exception}")
 
       message = await self.response_agent.generate(

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-import httpx
+import httpx2
 import ollama
 from ollama import ResponseError
 
@@ -37,7 +37,7 @@ async def load_ollama_model(settings: Settings) -> None:
 
     logger.info(f"Loading model {settings.ollama_model_name}...")
     await client.generate(model=settings.ollama_model_name, keep_alive=-1, stream=False)
-  except httpx.ReadTimeout as error:
+  except httpx2.ReadTimeout as error:
     _log_model_load_timeout(settings.ollama_model_name, error)
     return
   except ResponseError as error:

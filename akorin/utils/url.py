@@ -12,14 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-import httpx
+import httpx2
 
 
 def safe_url(value: object | None) -> str:
   if value is None:
     return "disabled"
 
-  url = httpx.URL(str(value))
+  url = httpx2.URL(str(value))
   updates: dict[str, object] = {"query": None, "fragment": None}
 
   if url.username or url.password:

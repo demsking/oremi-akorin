@@ -30,7 +30,7 @@ from typing import Generic
 from typing import TYPE_CHECKING
 from typing import TypeVar
 
-import httpx
+import httpx2
 import ollama
 from pydantic import BaseModel
 from pydantic import Field
@@ -79,7 +79,7 @@ class AgentClient(Generic[OutputModel], ABC):
   def __init__(
     self,
     settings: Settings,
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     cache: SmartCache | None = None,
   ) -> None:
     self.settings = settings
@@ -92,7 +92,7 @@ class AgentClient(Generic[OutputModel], ABC):
 
     self._initialize_clients(client)
 
-  def _initialize_clients(self, client: httpx.AsyncClient) -> None:
+  def _initialize_clients(self, client: httpx2.AsyncClient) -> None:
     """Securely initialize appropriate backing clients based on configuration."""
     if self.settings.should_use_ollama:
       self.ollama_client = ollama.AsyncClient(
@@ -104,7 +104,7 @@ class AgentClient(Generic[OutputModel], ABC):
       self.agent = self._create_agent()
 
   @staticmethod
-  def build_model(settings: Settings, model_settings: ModelSettings, client: httpx.AsyncClient) -> str:
+  def build_model(settings: Settings, model_settings: ModelSettings, client: httpx2.AsyncClient) -> str:
     del model_settings, client
     return settings.llm_model
 

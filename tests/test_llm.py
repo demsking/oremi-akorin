@@ -15,7 +15,7 @@
 from datetime import datetime
 from datetime import timezone
 
-import httpx
+import httpx2
 import pytest
 from pydantic_ai.messages import ModelResponse
 from pydantic_ai.messages import TextPart
@@ -58,7 +58,7 @@ async def test_chat_prompt_forbids_meta_commentary(monkeypatch):
 
   use_model(monkeypatch, FunctionModel(handler))
 
-  async with httpx.AsyncClient() as client:
+  async with httpx2.AsyncClient() as client:
     agent = ChatAgent(isolated_settings(), client)
     response = await agent.chat("Comment vas-tu ?", "fr", {"mood": "curious"})
 
@@ -71,7 +71,7 @@ async def test_chat_prompt_forbids_meta_commentary(monkeypatch):
 async def test_router_generation_is_deterministic(monkeypatch):
   use_model(monkeypatch, TestModel(custom_output_args={"service": "chat", "confidence": 0.8}))
 
-  async with httpx.AsyncClient() as client:
+  async with httpx2.AsyncClient() as client:
     agent = CommandAgent(isolated_settings(), client)
     decision = await agent.classify("Tell me something interesting")
 
@@ -133,7 +133,7 @@ async def test_command_agent_classifies_all_payload_examples(monkeypatch):
 
   use_model(monkeypatch, FunctionModel(handler))
 
-  async with httpx.AsyncClient() as client:
+  async with httpx2.AsyncClient() as client:
     agent = CommandAgent(isolated_settings(), client)
 
     for name, example in PAYLOAD_EXAMPLES.items():
@@ -159,7 +159,7 @@ async def test_response_agent_generates_contextual_user_message():
       self.request = kwargs
       return FakeResponse()
 
-  async with httpx.AsyncClient() as client:
+  async with httpx2.AsyncClient() as client:
     agent = ResponseAgent(ollama_settings(), client)
     fake_client = FakeOllamaClient()
     agent.ollama_client = fake_client
@@ -183,7 +183,7 @@ async def test_pydantic_ai_tool_call_records_tool_result(monkeypatch):
   tools = ToolRegistry([DateTimeTool(clock=lambda: current)])
   use_model(monkeypatch, TestModel(call_tools=["get_current_datetime"], custom_output_text="Il est 14 h 32."))
 
-  async with httpx.AsyncClient() as client:
+  async with httpx2.AsyncClient() as client:
     agent = ChatToolsAgent(isolated_settings(), client)
     result = await agent.chat("Quelle heure est-il ?", "fr", {"timezone": "Europe/Paris"}, tools)
 

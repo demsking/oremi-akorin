@@ -15,7 +15,7 @@
 import asyncio
 from unittest.mock import AsyncMock
 
-import httpx
+import httpx2
 import pytest
 
 from akorin.core.agent import AgentClient
@@ -124,7 +124,7 @@ class MockCachedComponent(ComponentClient):
 async def test_component_get_requests_are_cached_by_stable_request_inputs():
   cache = SmartCache(enabled=True, max_entries=10)
   component = MockCachedComponent(
-    Service.OREMI_OJO, "https://service.example", httpx.AsyncClient(), cache, cache_ttl_seconds=60
+    Service.OREMI_OJO, "https://service.example", httpx2.AsyncClient(), cache, cache_ttl_seconds=60
   )
 
   component._mock_session.call_tool.side_effect = [
@@ -146,7 +146,7 @@ async def test_component_get_requests_are_cached_by_stable_request_inputs():
 async def test_component_cache_bypasses_volatile_context_inputs():
   cache = SmartCache(enabled=True, max_entries=10)
   component = MockCachedComponent(
-    Service.OREMI_OJO, "https://service.example", httpx.AsyncClient(), cache, cache_ttl_seconds=60
+    Service.OREMI_OJO, "https://service.example", httpx2.AsyncClient(), cache, cache_ttl_seconds=60
   )
 
   component._mock_session.call_tool.side_effect = [
@@ -166,7 +166,7 @@ async def test_component_cache_bypasses_volatile_context_inputs():
 async def test_component_cache_bypasses_serialized_volatile_context_inputs():
   cache = SmartCache(enabled=True, max_entries=10)
   component = MockCachedComponent(
-    Service.OREMI_OJO, "https://service.example", httpx.AsyncClient(), cache, cache_ttl_seconds=60
+    Service.OREMI_OJO, "https://service.example", httpx2.AsyncClient(), cache, cache_ttl_seconds=60
   )
 
   component._mock_session.call_tool.side_effect = [
@@ -191,7 +191,7 @@ async def test_component_circuit_breaker_fails_fast_after_repeated_errors():
   component = MockCachedComponent(
     Service.OREMI_OJO,
     "https://service.example",
-    httpx.AsyncClient(),
+    httpx2.AsyncClient(),
     cache,
     circuit_breaker_enabled=True,
     circuit_breaker_failures=2,

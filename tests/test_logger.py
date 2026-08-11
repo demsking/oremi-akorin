@@ -47,4 +47,3 @@ def test_log_group(caplog):
     log_group(settings, "Server", "server_host", "server_port")
 
   assert "Server Settings: server_host=127.0.0.1 server_port=5020" in caplog.text
-

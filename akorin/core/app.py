@@ -18,7 +18,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from time import perf_counter
 
-import httpx
+import httpx2
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.responses import HTMLResponse
@@ -59,7 +59,7 @@ from akorin.utils.url import safe_url
 logger = logging.getLogger(__name__)
 
 
-def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None) -> FastAPI:
+def create_app(settings: Settings, http_client: httpx2.AsyncClient | None = None) -> FastAPI:
   @asynccontextmanager
   async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     startup_started = perf_counter()
@@ -125,7 +125,7 @@ def create_app(settings: Settings, http_client: httpx.AsyncClient | None = None)
       else:
         await load_ollama_model(settings)
 
-    client = http_client or httpx.AsyncClient(timeout=settings.http_request_timeout, follow_redirects=True)
+    client = http_client or httpx2.AsyncClient(timeout=settings.http_request_timeout, follow_redirects=True)
     smart_cache = SmartCache(enabled=settings.llm_cache_enabled, max_entries=settings.llm_cache_max_entries)
 
     configured_components = (
