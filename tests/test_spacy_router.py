@@ -57,19 +57,27 @@ async def test_spacy_router_categorizes_smart_home_queries():
   res1 = await router.route(make_route_context("Allume la lumière de la chambre"))
   assert res1 is not None
   assert res1.service == Service.OREMI_ISAKOSO
+  assert res1.selected_prompt is not None
+  assert res1.selected_prompt.name == "turn_on_device"
 
   res2 = await router.route(make_route_context("Éteins la lampe du salon s'il te plaît"))
   assert res2 is not None
   assert res2.service == Service.OREMI_ISAKOSO
+  assert res2.selected_prompt is not None
+  assert res2.selected_prompt.name == "turn_off_device"
 
   # English smart home queries
   res3 = await router.route(make_route_context("Turn on the living room lights"))
   assert res3 is not None
   assert res3.service == Service.OREMI_ISAKOSO
+  assert res3.selected_prompt is not None
+  assert res3.selected_prompt.name == "turn_on_device"
 
   res4 = await router.route(make_route_context("Turn off the kitchen plug"))
   assert res4 is not None
   assert res4.service == Service.OREMI_ISAKOSO
+  assert res4.selected_prompt is not None
+  assert res4.selected_prompt.name == "turn_off_device"
 
 
 @pytest.mark.asyncio

@@ -42,8 +42,11 @@ class RoutePromptDecision(RouteSemanticDecision, BaseModel):
 
 
 class RouteSpacyDecision(RouteSemanticDecision):
+  selected_prompt: SelectedPrompt | None = None
+
   def __str__(self) -> str:
-    return f"RouteSpacyDecision(service={self.service.name}, confidence={self.confidence})"
+    prompt_str = f", selected_prompt={self.selected_prompt}" if self.selected_prompt else ""
+    return f"RouteSpacyDecision(service={self.service.name}, confidence={self.confidence}{prompt_str})"
 
 
 type RouteDecision = RouteSemanticDecision | RoutePromptDecision | RouteSpacyDecision

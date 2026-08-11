@@ -35,7 +35,6 @@ from akorin.core.response import ProcessResponse
 from akorin.core.router import RequestRouter
 from akorin.core.router import RouteContext
 from akorin.core.router import RouteDecision
-from akorin.core.router import RoutePromptDecision
 from akorin.core.router import RouteSemanticDecision
 from akorin.core.service import Service
 from akorin.core.settings import Settings
@@ -328,10 +327,11 @@ class Orchestrator:
     message_to_send = request.message
 
     try:
-      if isinstance(decision, RoutePromptDecision) and decision.selected_prompt.name:
-        logger.debug(f"[{request_id}] Rendering prompt: {decision.selected_prompt.name}")
+      selected_prompt = getattr(decision, "selected_prompt", None)
+      if selected_prompt and selected_prompt.name:
+        logger.debug(f"[{request_id}] Rendering prompt: {selected_prompt.name}")
 
-        rendered = await handler.get_prompt(decision.selected_prompt.name, decision.selected_prompt.arguments)
+        rendered = await handler.get_prompt(selected_prompt.name, selected_prompt.arguments)
         prompt_messages = []
 
         for msg in rendered.messages:

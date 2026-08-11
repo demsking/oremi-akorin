@@ -22,6 +22,7 @@ import spacy
 from spacy.matcher import Matcher
 from spacy.matcher import PhraseMatcher
 
+from akorin.agents.prompt_selector_agent import SelectedPrompt
 from akorin.core.router import RequestRouter
 from akorin.core.router import RouteContext
 from akorin.core.router import RouteSpacyDecision
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class SpacyRouter(RequestRouter):
-  """Sub-millisecond NLP intent categorization router powered by spaCy."""
+  """Sub-millisecond NLP intent categorization & prompt selection router powered by spaCy."""
 
   _NLP_PIPELINE: ClassVar[spacy.language.Language | None] = None
 
@@ -45,7 +46,7 @@ class SpacyRouter(RequestRouter):
   def _initialize_nlp(self) -> None:
     """Initialize spaCy blank French/English language model and matchers."""
     if SpacyRouter._NLP_PIPELINE is None:
-      logger.info("Initializing spaCy NLP pipeline for intent classification...")
+      logger.info("Initializing spaCy NLP pipeline for intent & prompt classification...")
       SpacyRouter._NLP_PIPELINE = spacy.blank("fr")
 
     self._nlp = SpacyRouter._NLP_PIPELINE
@@ -59,9 +60,10 @@ class SpacyRouter(RequestRouter):
     if self._nlp is None or self._phrase_matcher is None:
       return
 
-    # Category Phrase Patterns
-    category_phrases: dict[Service, list[str]] = {
-      Service.OREMI_OJO: [
+    # Category & Prompt-Specific Phrase Patterns
+    category_phrases: dict[str, list[str]] = {
+      # --- OJO ---
+      Service.OREMI_OJO.value: [
         "météo",
         "meteo",
         "quel temps",
@@ -82,35 +84,73 @@ class SpacyRouter(RequestRouter):
         "is it raining",
         "air quality",
       ],
-      Service.OREMI_ISAKOSO: [
+      # --- ISAKOSO PROMPTS ---
+      f"{Service.OREMI_ISAKOSO.value}:turn_on_device": [
         "allume la lumière",
         "allume les lumières",
         "allume la lampe",
+        "allume les lampes",
+        "allume la prise",
+        "turn on the light",
+        "turn on the lights",
+        "turn on the lamp",
+        "turn on the plug",
+        "turn on the switch",
+      ],
+      f"{Service.OREMI_ISAKOSO.value}:turn_off_device": [
         "éteins la lumière",
         "éteins les lumières",
         "éteins la lampe",
+        "éteins la prise",
         "eteins la lumiere",
         "eteins les lumieres",
         "eteins la lampe",
-        "allume la prise",
-        "éteins la prise",
+        "turn off the light",
+        "turn off the lights",
+        "turn off the lamp",
+        "turn off the plug",
+        "turn off the switch",
+      ],
+      f"{Service.OREMI_ISAKOSO.value}:toggle_device": [
+        "bascule la lumière",
+        "bascule la prise",
+        "toggle the light",
+        "toggle the plug",
+        "toggle the switch",
+      ],
+      f"{Service.OREMI_ISAKOSO.value}:set_device_brightness": [
+        "mets la luminosité",
+        "règle la luminosité",
+        "regle la luminosite",
+        "ajuste la luminosité",
+        "set the brightness",
+        "set brightness",
+      ],
+      f"{Service.OREMI_ISAKOSO.value}:set_device_color": [
+        "mets la couleur",
+        "change la couleur",
+        "règle la couleur",
+        "set the color",
+        "set color",
+      ],
+      f"{Service.OREMI_ISAKOSO.value}:summarize_devices": [
+        "état des appareils",
+        "etat des appareils",
+        "résumé des appareils",
+        "summarize devices",
+        "status of devices",
+      ],
+      Service.OREMI_ISAKOSO.value: [
         "ferme les volets",
         "ouvre les volets",
         "active le chauffage",
         "désactive le chauffage",
-        "turn on the light",
-        "turn on the lights",
-        "turn off the light",
-        "turn off the lights",
-        "turn on the lamp",
-        "turn off the lamp",
-        "turn on the plug",
-        "turn off the plug",
-        "set the temperature",
         "close the blinds",
         "open the blinds",
+        "set the temperature",
       ],
-      Service.OREMI_ISINMI: [
+      # --- ISINMI ---
+      Service.OREMI_ISINMI.value: [
         "rappelle-moi",
         "rappelle moi",
         "mets un réveil",
@@ -123,7 +163,8 @@ class SpacyRouter(RequestRouter):
         "set a reminder",
         "wake me up",
       ],
-      Service.OREMI_REDIYO: [
+      # --- REDIYO ---
+      Service.OREMI_REDIYO.value: [
         "écouter la radio",
         "ecouter la radio",
         "mets la radio",
@@ -134,7 +175,8 @@ class SpacyRouter(RequestRouter):
         "play radio",
         "listen to radio",
       ],
-      Service.OREMI_KANSA: [
+      # --- KANSA ---
+      Service.OREMI_KANSA.value: [
         "écouter le podcast",
         "ecouter le podcast",
         "dernier épisode",
@@ -143,7 +185,8 @@ class SpacyRouter(RequestRouter):
         "listen to podcast",
         "latest episode",
       ],
-      Service.CHAT: [
+      # --- CHAT ---
+      Service.CHAT.value: [
         "quelle heure",
         "quelle heure est-il",
         "il est quelle heure",
@@ -158,9 +201,9 @@ class SpacyRouter(RequestRouter):
       ],
     }
 
-    for service, phrases in category_phrases.items():
+    for key, phrases in category_phrases.items():
       docs = [self._nlp.make_doc(phrase) for phrase in phrases]
-      self._phrase_matcher.add(service.value, docs)
+      self._phrase_matcher.add(key, docs)
 
   def _build_token_patterns(self) -> None:
     if self._nlp is None or self._token_matcher is None:
@@ -184,12 +227,12 @@ class SpacyRouter(RequestRouter):
       ],
     )
 
-    # Isakoso / Smart Home Token Patterns
+    # Isakoso Prompt-Specific Token Patterns
     self._token_matcher.add(
-      Service.OREMI_ISAKOSO.value,
+      f"{Service.OREMI_ISAKOSO.value}:turn_on_device",
       [
         [
-          {"LOWER": {"IN": ["allume", "allumer", "éteins", "éteindre", "eteins", "eteindre", "ouvre", "ferme", "active"]}},
+          {"LOWER": {"IN": ["allume", "allumer"]}},
           {"OP": "*"},
           {
             "LOWER": {
@@ -202,20 +245,61 @@ class SpacyRouter(RequestRouter):
                 "lampes",
                 "prise",
                 "prises",
-                "volet",
-                "volets",
-                "thermostat",
-                "radiateur",
                 "interrupteur",
+                "switch",
               ]
             }
           },
         ],
         [
           {"LOWER": "turn"},
-          {"LOWER": {"IN": ["on", "off"]}},
+          {"LOWER": "on"},
           {"OP": "*"},
-          {"LOWER": {"IN": ["light", "lights", "lamp", "lamps", "plug", "plugs", "switch", "switches", "blind", "blinds"]}},
+          {"LOWER": {"IN": ["light", "lights", "lamp", "lamps", "plug", "plugs", "switch", "switches"]}},
+        ],
+      ],
+    )
+
+    self._token_matcher.add(
+      f"{Service.OREMI_ISAKOSO.value}:turn_off_device",
+      [
+        [
+          {"LOWER": {"IN": ["éteins", "éteindre", "eteins", "eteindre"]}},
+          {"OP": "*"},
+          {
+            "LOWER": {
+              "IN": [
+                "lumière",
+                "lumiere",
+                "lumieres",
+                "lumières",
+                "lampe",
+                "lampes",
+                "prise",
+                "prises",
+                "interrupteur",
+                "switch",
+              ]
+            }
+          },
+        ],
+        [
+          {"LOWER": "turn"},
+          {"LOWER": "off"},
+          {"OP": "*"},
+          {"LOWER": {"IN": ["light", "lights", "lamp", "lamps", "plug", "plugs", "switch", "switches"]}},
+        ],
+      ],
+    )
+
+    # Generic Isakoso Token Patterns
+    self._token_matcher.add(
+      Service.OREMI_ISAKOSO.value,
+      [
+        [
+          {"LOWER": {"IN": ["ouvre", "ferme", "active", "désactive", "desactive"]}},
+          {"OP": "*"},
+          {"LOWER": {"IN": ["volet", "volets", "thermostat", "radiateur", "chauffage"]}},
         ],
         [
           {"LOWER": "switch"},
@@ -288,6 +372,26 @@ class SpacyRouter(RequestRouter):
       ],
     )
 
+  def _resolve_match(self, match_key: str, text: str, context: RouteContext) -> tuple[Service, SelectedPrompt | None] | None:
+    parts = match_key.split(":", 1)
+    service_str = parts[0]
+    prompt_name = parts[1] if len(parts) > 1 else None
+
+    try:
+      service = Service(service_str)
+    except ValueError:
+      return None
+
+    selected_prompt = None
+
+    if prompt_name:
+      available_names = {p.name for p in context.all_prompts} if context.all_prompts else set()
+
+      if not available_names or prompt_name in available_names:
+        selected_prompt = SelectedPrompt(name=prompt_name, arguments={"command": text})
+
+    return service, selected_prompt
+
   async def route(self, context: RouteContext) -> RouteSpacyDecision | None:
     if self._nlp is None or self._phrase_matcher is None or self._token_matcher is None:
       return None
@@ -306,48 +410,48 @@ class SpacyRouter(RequestRouter):
 
     if phrase_matches:
       match_id, start, end = phrase_matches[0]
-      service_name = self._nlp.vocab.strings[match_id]
+      match_key = self._nlp.vocab.strings[match_id]
       matched_text = doc[start:end].text
+      resolved = self._resolve_match(match_key, text, context)
 
-      try:
-        service = Service(service_name)
+      if resolved:
+        service, selected_prompt = resolved
         duration_ms = (perf_counter() - routing_started) * 1000.0
 
         logger.info(
-          "[%s] SpacyRouter decision via phrase match: service=%s matched_phrase=%r duration_ms=%.2f",
+          "[%s] SpacyRouter decision via phrase match: service=%s prompt=%s matched_phrase=%r duration_ms=%.2f",
           context.request_id,
           service.value,
+          selected_prompt.name if selected_prompt else "none",
           matched_text,
           duration_ms,
         )
 
-        return RouteSpacyDecision(service=service, confidence=0.98)
-      except ValueError:
-        pass
+        return RouteSpacyDecision(service=service, confidence=0.98, selected_prompt=selected_prompt)
 
     # 2. Match Token Patterns (Structural Token Pattern Matcher)
     token_matches = self._token_matcher(doc)
 
     if token_matches:
       match_id, start, end = token_matches[0]
-      service_name = self._nlp.vocab.strings[match_id]
+      match_key = self._nlp.vocab.strings[match_id]
       matched_text = doc[start:end].text
+      resolved = self._resolve_match(match_key, text, context)
 
-      try:
-        service = Service(service_name)
+      if resolved:
+        service, selected_prompt = resolved
         duration_ms = (perf_counter() - routing_started) * 1000.0
 
         logger.info(
-          "[%s] SpacyRouter decision via token match: service=%s matched_tokens=%r duration_ms=%.2f",
+          "[%s] SpacyRouter decision via token match: service=%s prompt=%s matched_tokens=%r duration_ms=%.2f",
           context.request_id,
           service.value,
+          selected_prompt.name if selected_prompt else "none",
           matched_text,
           duration_ms,
         )
 
-        return RouteSpacyDecision(service=service, confidence=0.95)
-      except ValueError:
-        pass
+        return RouteSpacyDecision(service=service, confidence=0.95, selected_prompt=selected_prompt)
 
     logger.debug("[%s] SpacyRouter: No matching intent pattern found", context.request_id)
 
