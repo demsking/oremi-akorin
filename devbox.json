@@ -6,7 +6,7 @@
     "gitmux": "latest",
     "tmuxinator": "latest",
     "gnumake": "latest",
-    "pre-commit": "latest",
+    "prek": "latest",
     "hadolint": "latest",
     "shellcheck": "latest",
     "ruff": "latest",
@@ -22,7 +22,7 @@
   },
   "shell": {
     "init_hook": [
-      "pre-commit install -f",
+      "prek install -f",
       "export PATH=.venv/bin:$PATH"
     ],
     "scripts": {}
