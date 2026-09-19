@@ -6,6 +6,7 @@ dist/
 __pycache__/
 .ruff_cache/
 .nix-node/
+.dsh-project-memory/
 .directory
 .coverage
 *.log
