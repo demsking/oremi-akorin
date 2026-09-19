@@ -41,7 +41,7 @@ akorin/
                         # tools registry, component client, request/response models, exceptions
   api/                  # FastAPI routers: agent.py, health.py, docs.py
   agents/               # LLM agents built on core/agent.AgentClient
-  routers/              # request routers: spacy_router, mcp_router, semantic_router
+  routers/              # request routers: spacy_router, mcp_router, openjev, semantic_router
   components/           # thin MCP clients per external Oremi service
   tools/                # native (local) tools: datetime, calculator, unit conversion
   utils/                # cache, logging, language, context filters, device commands, url
@@ -65,6 +65,9 @@ Do not add `__init__.py` files to `akorin/*` without a deliberate reason.
    - `SpacyRouter` (`routers/spacy_router.py`) — spaCy `blank("fr")` phrase/token
      matchers. Phrase match confidence `0.98`, token match `0.95`.
    - `McpPromptRouter` (`routers/mcp_router.py`) — picks an MCP prompt via `PromptSelectorAgent`, confidence `1.0`.
+   - `OpenJevRouter` (`routers/openjev.py`) — optional OpenJev/SGLang classifier
+     (only present when `OREMI_AKORIN_OPENJEV_URL` is set). Returns `None` on low
+     confidence or error so the `SemanticRouter` below takes over.
    - `SemanticRouter` (`routers/semantic_router.py`) — LLM classification via `CommandAgent`,
      bounded by `_timeout_for(...)` against `request_budget_seconds`.
    - Fallback: `RouteSemanticDecision(service=Service.CHAT, confidence=0.0)`.
@@ -243,6 +246,7 @@ Oremi services and Ollama for integration work.
 | A new external Oremi service | `akorin/components/<name>.py` (subclass `ComponentClient`), a `Service` member, a `Settings` URL field, a row in `create_app` `configured_components`, and `_SERVICE_CONTEXT_KEYS` |
 | A new native tool | `akorin/tools/<name>_tool.py` implementing `OllamaTool`, registered in the `ToolRegistry([...])` in `create_app` |
 | A new routing strategy | `akorin/routers/<name>_router.py` subclassing `RequestRouter`, inserted into `Orchestrator.routers` in the correct precedence position |
+| A new semantic classifier backend | `akorin/core/classifier.py` for the `SemanticClassifier` protocol + `ClassificationResult`; the HTTP client + router in `akorin/routers/openjev.py` |
 | A new LLM behavior/agent | `akorin/agents/<name>_agent.py` subclassing `AgentClient`, overriding only prompt/config, plus a field on `Orchestrator` |
 | A new HTTP endpoint | `akorin/api/<name>.py` with an `APIRouter` and `API_TAG_METADATA`, included in `create_app` |
 | Shared pure helpers | `akorin/utils/` (no FastAPI/LLM imports) |

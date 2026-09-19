@@ -95,6 +95,16 @@ def create_app(settings: Settings, http_client: httpx2.AsyncClient | None = None
       "isakoso_url",
     )
 
+    log_group(
+      settings,
+      "OpenJev",
+      "openjev_url",
+      "openjev_model",
+      "openjev_request_timeout",
+      "openjev_confidence_threshold",
+      "openjev_max_concurrency",
+    )
+
     log_group(settings, "Logging", "log_level", "log_file")
     log_group(
       settings,

@@ -119,6 +119,37 @@ class Settings(BaseSettings):
     description="Base URL for the Oremi Isakoso service.",
   )
 
+  openjev_url: HttpUrl | None = Field(
+    default=None,
+    description="Base URL of the OpenJev (Jev-compatible) server backed by SGLang. Leave unset to disable the OpenJev semantic router.",
+  )
+
+  openjev_model: str = Field(
+    default="jev-latest",
+    description="Model identifier sent to the OpenJev server (its compatibility alias for the served model).",
+  )
+
+  openjev_request_timeout: float = Field(
+    default=4.0,
+    ge=0.1,
+    le=60.0,
+    description="Maximum time in seconds for one OpenJev classification before falling back to the LLM router.",
+  )
+
+  openjev_confidence_threshold: float = Field(
+    default=0.5,
+    ge=0.0,
+    le=1.0,
+    description="Minimum OpenJev confidence required to accept its classification; lower values fall back to the LLM router.",
+  )
+
+  openjev_max_concurrency: int = Field(
+    default=16,
+    ge=1,
+    le=256,
+    description="Maximum concurrent OpenJev classification requests allowed by this process.",
+  )
+
   http_request_timeout: float = Field(
     default=30.0,
     gt=1.0,
@@ -227,6 +258,15 @@ class Settings(BaseSettings):
   @classmethod
   def validate_ollama_base_url(cls, value: Any) -> Any:
     """Remove trailing slashes from Ollama host URL."""
+    if isinstance(value, str):
+      value = value.rstrip("/")
+
+    return value
+
+  @field_validator("openjev_url", mode="before")
+  @classmethod
+  def validate_openjev_url(cls, value: Any) -> Any:
+    """Remove trailing slashes from the OpenJev base URL."""
     if isinstance(value, str):
       value = value.rstrip("/")
 

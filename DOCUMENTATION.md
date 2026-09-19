@@ -375,6 +375,85 @@ The chat model can call these built-in tools:
 
 Examples include "What is `(18 * 4) + 7`?", "Convert 5 kilometers to miles",
 "What time is it in Lagos?", "List all available resources", or "Get the summarize prompt".
+## OpenJev / SGLang Semantic Classifier
+
+Oremi Akọrin can use an optional, experimental **OpenJev** server backed by
+**SGLang** as a specialized backend for semantic routing. It is a fast-path
+classifier that sits between the deterministic routers and the existing LLM
+semantic router. It never replaces `AgentClient`; it is only a classification
+backend for the routing stage.
+
+OpenJev implements the Jev-compatible `/v1/systemone` HTTP API. Oremi Akọrin
+sends a single `choice` question whose options are the Oremi services, and reads
+back the chosen service, the per-option probabilities, and a confidence score.
+
+### How it integrates
+
+```text
+HTTP request
+    │
+    ▼
+Orchestrator
+    ├── SpacyRouter         (deterministic, fastest)
+    ├── McpPromptRouter     (MCP prompt selection)
+    ├── OpenJevRouter       (OpenJev/SGLang, when configured)
+    │        ├── confident → RouteDecision
+    │        └── uncertain/error → fall through
+    └── SemanticRouter      (existing LLM router fallback)
+```
+
+The OpenJev router runs only when `OREMI_AKORIN_OPENJEV_URL` is set. It returns a
+routing decision only when the classifier is healthy, responds in time, and its
+confidence is at or above the configured threshold. Otherwise it returns nothing
+and the existing LLM semantic router takes over, exactly as before. A classifier
+outage never makes Oremi unavailable.
+
+### Configuration
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `OREMI_AKORIN_OPENJEV_URL` | unset | Base URL of the OpenJev server. Unset disables the OpenJev router. |
+| `OREMI_AKORIN_OPENJEV_MODEL` | `jev-latest` | Model id sent to the server (its compatibility alias). |
+| `OREMI_AKORIN_OPENJEV_REQUEST_TIMEOUT` | `4.0` | Per-classification timeout before falling back. |
+| `OREMI_AKORIN_OPENJEV_CONFIDENCE_THRESHOLD` | `0.5` | Minimum confidence to accept a classification. |
+| `OREMI_AKORIN_OPENJEV_MAX_CONCURRENCY` | `16` | Maximum concurrent classification requests. |
+
+The confidence score is the OpenJev-reported distribution concentration (1 minus
+normalized entropy), not a calibrated probability of correctness. The default
+threshold `0.5` is an initial value to be tuned against the benchmark below, not a
+validated optimum.
+
+### Local development
+
+OpenJev is a separate process. Oremi Akọrin talks to it over HTTP; it does not
+embed a model or require a GPU. A reference implementation is
+`https://github.com/ekzhang/openjev-sglang` (Jev-compatible API on
+Qwen3.6-35B-A3B with SGLang, requiring a GPU such as an NVIDIA B200 for that
+specific deployment). Run it, then point Oremi at its URL:
+
+```sh
+export OREMI_AKORIN_OPENJEV_URL=http://localhost:8787
+```
+
+Oremi remains fully functional with the variable unset; only the fast
+classification path is skipped.
+
+### Benchmark
+
+A reproducible routing-stage benchmark is provided:
+
+```sh
+# Code-path overhead only (no inference, no network):
+uv run python scripts/benchmark_routing.py --mode mock --iterations 2000
+
+# Live measurement against a running OpenJev server:
+uv run python scripts/benchmark_routing.py --mode openjev --url http://localhost:8787
+```
+
+The benchmark reports p50/p95/p99/mean latency, throughput, fallback rate, and
+classifier error rate for the routing stage. It intentionally measures only the
+routing decision, not the full end-to-end request. `--mode mock` numbers reflect
+code-path overhead only and must not be mistaken for real performance.
 
 ## Docker
 

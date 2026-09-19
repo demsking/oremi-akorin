@@ -46,6 +46,8 @@ from akorin.core.tools import OllamaTool
 from akorin.core.tools import ReadResourceTool
 from akorin.core.tools import ToolRegistry
 from akorin.routers.mcp_router import McpPromptRouter
+from akorin.routers.openjev import OpenJevRouter
+from akorin.routers.openjev import OpenJevSglangClassifier
 from akorin.routers.semantic_router import SemanticRouter
 from akorin.routers.spacy_router import SpacyRouter
 from akorin.utils.cache import has_volatile_context
@@ -82,12 +84,42 @@ class Orchestrator:
     self.response_agent = ResponseAgent(settings, client, cache)
     self.prompt_selector_agent_agent = PromptSelectorAgent(settings, client, cache)
 
+    # Optional OpenJev/SGLang semantic classifier (disabled when no URL is configured).
+    self.openjev_router = self._build_openjev_router(settings, client)
+
     # Initialize Routing Chain
     self.routers: list[RequestRouter] = [
       SpacyRouter(),
       McpPromptRouter(self.prompt_selector_agent_agent),
-      SemanticRouter(self.command_agent, lambda started: self._timeout_for(started, self.settings.route_timeout_seconds)),
     ]
+
+    if self.openjev_router is not None:
+      self.routers.append(self.openjev_router)
+
+    self.routers.append(
+      SemanticRouter(self.command_agent, lambda started: self._timeout_for(started, self.settings.route_timeout_seconds))
+    )
+
+  def _build_openjev_router(self, settings: Settings, client: httpx2.AsyncClient) -> OpenJevRouter | None:
+    """Build the OpenJev/SGLang router, or None when the classifier is disabled."""
+    if settings.openjev_url is None:
+      return None
+
+    classifier = OpenJevSglangClassifier(
+      base_url=str(settings.openjev_url),
+      client=client,
+      model=settings.openjev_model,
+      timeout=settings.openjev_request_timeout,
+      max_concurrency=settings.openjev_max_concurrency,
+      cache=self.cache,
+      cache_ttl_seconds=settings.llm_cache_ttl_seconds,
+    )
+
+    return OpenJevRouter(
+      classifier=classifier,
+      confidence_threshold=settings.openjev_confidence_threshold,
+      timeout_calculator=lambda started: self._timeout_for(started, settings.openjev_request_timeout),
+    )
 
   # --- Retained Helper Methods ---
 
