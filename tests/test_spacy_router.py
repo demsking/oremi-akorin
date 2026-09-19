@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+import mcp_types as t
 import pytest
 
 from akorin.core.request import ProcessRequest
@@ -108,6 +109,24 @@ async def test_spacy_router_categorizes_radio_and_podcast():
   res2 = await router.route(make_route_context("Mets le dernier épisode du podcast"))
   assert res2 is not None
   assert res2.service == Service.OREMI_KANSA
+
+
+@pytest.mark.asyncio
+async def test_spacy_router_selects_rediyo_prompt_when_available():
+  router = SpacyRouter()
+  context = make_route_context("Play BBC Radio 1 Dance")
+  context.all_prompts = [
+    t.Prompt(name="play_radio", description="Play a radio station", arguments=[]),
+    t.Prompt(name="summarize_directory", description="Summarize radio directory stats", arguments=[]),
+    t.Prompt(name="explore_by_genre", description="Explore stations by genre", arguments=[]),
+  ]
+
+  res = await router.route(context)
+
+  assert res is not None
+  assert res.service == Service.OREMI_REDIYO
+  assert res.selected_prompt is not None
+  assert res.selected_prompt.name == "play_radio"
 
 
 @pytest.mark.asyncio

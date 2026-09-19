@@ -390,7 +390,59 @@ class SpacyRouter(RequestRouter):
       if not available_names or prompt_name in available_names:
         selected_prompt = SelectedPrompt(name=prompt_name, arguments={"command": text})
 
+    if not selected_prompt:
+      selected_prompt = self._infer_service_prompt(service, text, context)
+
     return service, selected_prompt
+
+  def _infer_service_prompt(self, service: Service, text: str, context: RouteContext) -> SelectedPrompt | None:
+    if not context.all_prompts:
+      return None
+
+    prompt_names = [getattr(prompt, "name", None) for prompt in context.all_prompts if getattr(prompt, "name", None)]
+
+    if not prompt_names:
+      return None
+
+    service_prompts = [
+      prompt
+      for prompt in context.all_prompts
+      if getattr(prompt, "name", None)
+      and (
+        context.prompt_to_service.get(prompt.name) == service
+        or (
+          not context.prompt_to_service
+          and service == Service.OREMI_REDIYO
+          and getattr(prompt, "name", None) in {"play_radio", "summarize_directory", "explore_by_genre"}
+        )
+      )
+    ]
+
+    if not service_prompts:
+      return None
+
+    normalized_text = text.lower()
+
+    if service == Service.OREMI_REDIYO:
+      prompt_keywords = {
+        "play_radio": ["play", "listen", "start", "station", "radio", "bbc", "channel", "dance"],
+        "summarize_directory": ["directory", "stats", "summary", "categories", "countries", "languages", "tags", "top"],
+        "explore_by_genre": ["genre", "tag", "category", "explore", "popular"],
+      }
+
+      for prompt_name, keywords in prompt_keywords.items():
+        if any(keyword in normalized_text for keyword in keywords):
+          if any(getattr(prompt, "name", None) == prompt_name for prompt in service_prompts):
+            return SelectedPrompt(name=prompt_name, arguments={"command": text})
+
+      if any(getattr(prompt, "name", None) == "play_radio" for prompt in service_prompts):
+        return SelectedPrompt(name="play_radio", arguments={"command": text})
+
+    if len(service_prompts) == 1:
+      prompt = service_prompts[0]
+      return SelectedPrompt(name=getattr(prompt, "name", None), arguments={"command": text})
+
+    return None
 
   async def route(self, context: RouteContext) -> RouteSpacyDecision | None:
     if self._nlp is None or self._phrase_matcher is None or self._token_matcher is None:

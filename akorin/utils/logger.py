@@ -48,6 +48,7 @@ def configure_logging(level: str, log_file: str | None) -> None:
   for noisy_logger in ("watchfiles", "watchfiles.main"):
     logging.getLogger(noisy_logger).setLevel(logging.WARNING)
 
-  logging.getLogger("httpcore.http11").setLevel(logging.INFO)
-  logging.getLogger("httpcore.connection").setLevel(logging.INFO)
+  logging.getLogger("httpcore.http11").setLevel(logging.ERROR)
+  logging.getLogger("httpcore.connection").setLevel(logging.ERROR)
+  logging.getLogger("mcp.client.streamable_http").setLevel(logging.ERROR)
   logging.getLogger("httpx").setLevel(logging.WARNING)
