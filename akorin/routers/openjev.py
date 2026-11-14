@@ -192,7 +192,11 @@ class OpenJevRouter(RequestRouter):
         self.classifier.classify(context.request.message, [service.value for service in ROUTING_LABELS]),
         timeout=timeout,
       )
-    except (asyncio.TimeoutError, OpenJevError, ValueError) as exception:
+    except asyncio.CancelledError:
+      raise
+    except Exception as exception:
+      # Any classifier failure must degrade to the existing LLM router rather
+      # than fail the user request.
       logger.warning("[%s] OpenJevRouter failed: %s", context.request_id, exception)
       return None
 

@@ -426,3 +426,63 @@ async def test_openjev_confident_decision_beats_semantic_router(monkeypatch):
   assert body["service"] == "chat"
   assert body["ok"] is True
 
+
+# --- Fail-safe behavior and concurrency limit ---
+
+
+@pytest.mark.asyncio
+async def test_router_falls_back_on_unexpected_exception():
+  router = make_router(FakeClassifier(error=RuntimeError("classifier bug")), threshold=0.5)
+
+  decision = await router.route(make_context())
+
+  assert decision is None
+
+
+@pytest.mark.asyncio
+async def test_classifier_respects_max_concurrency():
+  in_flight = 0
+  peak = 0
+
+  async def handler(request: httpx2.Request) -> httpx2.Response:
+    nonlocal in_flight, peak
+    in_flight += 1
+    peak = max(peak, in_flight)
+    await asyncio.sleep(0.02)
+    in_flight -= 1
+
+    return choice_response("chat", 0.99)
+
+  classifier = make_classifier(handler, max_concurrency=1)
+
+  await asyncio.gather(*(classifier.classify(f"message {index}", ROUTING_LABELS) for index in range(5)))
+
+  assert peak == 1
+
+
+@pytest.mark.asyncio
+async def test_classifier_payload_matches_openjev_choice_schema():
+  import json
+
+  captured = {}
+
+  def handler(request: httpx2.Request) -> httpx2.Response:
+    captured["body"] = request.read().decode("utf-8")
+
+    return choice_response("ojo", 0.97)
+
+  classifier = make_classifier(handler)
+
+  await classifier.classify("Quel temps fait-il ?", ROUTING_LABELS)
+
+  body = json.loads(captured["body"])
+  question = body["questions"]["routing"]
+
+  assert body["model"] == "jev-latest"
+  assert isinstance(body["state"], str)
+  assert question["type"] == "choice"
+  assert isinstance(question["instructions"], str) and question["instructions"]
+  assert set(question["criteria"]) == set(ROUTING_LABELS)
+  assert all(isinstance(value, str) and value for value in question["criteria"].values())
+
+
