@@ -77,7 +77,9 @@ def create_app(settings: Settings, http_client: httpx2.AsyncClient | None = None
     log_group(
       settings,
       "LLM",
+      "llm_backend",
       "llm_model",
+      "llm_base_url",
       "llm_request_timeout",
       "llm_temperature",
       "llm_max_response_tokens",

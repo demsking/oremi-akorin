@@ -21,6 +21,7 @@ from typing import Literal
 from pydantic import Field
 from pydantic import field_validator
 from pydantic import HttpUrl
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from pydantic_settings import SettingsConfigDict
 
@@ -92,6 +93,25 @@ class Settings(BaseSettings):
   ollama_base_url: HttpUrl | None = Field(
     default=None,
     description="Ollama API base URL used when the agent runs on Ollama.",
+  )
+
+  llm_backend: Literal["auto", "ollama", "sglang", "max"] = Field(
+    default="auto",
+    description=(
+      "LLM inference backend. 'auto' preserves the historical behaviour: native Ollama when llm_model starts "
+      "with 'ollama:', otherwise the Pydantic AI provider. 'sglang' and 'max' run through an OpenAI-compatible "
+      "server configured with OREMI_AKORIN_LLM_BASE_URL."
+    ),
+  )
+
+  llm_base_url: HttpUrl | None = Field(
+    default=None,
+    description="Base URL (including the /v1 suffix) of the OpenAI-compatible inference server used by the sglang and max backends.",
+  )
+
+  llm_api_key: str = Field(
+    default="EMPTY",
+    description="API key sent to the OpenAI-compatible inference server; local servers usually ignore it.",
   )
 
   isinmi_url: HttpUrl | None = Field(
@@ -272,6 +292,25 @@ class Settings(BaseSettings):
 
     return value
 
+  @field_validator("llm_base_url", mode="before")
+  @classmethod
+  def validate_llm_base_url(cls, value: Any) -> Any:
+    """Remove trailing slashes from the OpenAI-compatible base URL."""
+    if isinstance(value, str):
+      value = value.rstrip("/")
+
+    return value
+
+  @model_validator(mode="after")
+  def validate_backend_configuration(self) -> "Settings":
+    """Require an explicit base URL for the OpenAI-compatible backends."""
+    if self.resolved_llm_backend in {"sglang", "max"} and self.llm_base_url is None:
+      raise ValueError(
+        f"OREMI_AKORIN_LLM_BASE_URL is required when OREMI_AKORIN_LLM_BACKEND='{self.resolved_llm_backend}'"
+      )
+
+    return self
+
   @property
   def service_urls(self) -> dict[Service, HttpUrl | None]:
     """Get all service URLs as a dictionary."""
@@ -293,10 +332,30 @@ class Settings(BaseSettings):
     return len(self.configured_services) > 0
 
   @cached_property
-  def should_use_ollama(self) -> bool:
-    """Return whether the active agent model uses the Ollama backend."""
+  def resolved_llm_backend(self) -> Literal["ollama", "sglang", "max", "pydantic"]:
+    """Return the effective LLM backend after resolving the 'auto' default."""
+    if self.llm_backend != "auto":
+      return self.llm_backend
 
-    return self.llm_model.startswith("ollama:")
+    return "ollama" if self.llm_model.startswith("ollama:") else "pydantic"
+
+  @cached_property
+  def should_use_ollama(self) -> bool:
+    """Return whether the active agent model uses the native Ollama backend."""
+    return self.resolved_llm_backend == "ollama"
+
+  @cached_property
+  def should_use_openai_compatible(self) -> bool:
+    """Return whether the active backend is an OpenAI-compatible inference server."""
+    return self.resolved_llm_backend in {"sglang", "max"}
+
+  @cached_property
+  def llm_base_url_string(self) -> str:
+    """Return the OpenAI-compatible base URL for the Pydantic AI provider."""
+    if self.llm_base_url is None:
+      raise ValueError("OREMI_AKORIN_LLM_BASE_URL is required when using the sglang or max backend")
+
+    return str(self.llm_base_url).rstrip("/")
 
   @cached_property
   def ollama_model_name(self) -> str:

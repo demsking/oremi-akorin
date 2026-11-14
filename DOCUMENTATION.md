@@ -248,6 +248,36 @@ the environment or a `.env` file in the working directory.
   - `anthropic:claude-sonnet-4-0`
   - Requires an Anthropic API key.
 
+### Inference Backend Settings
+
+Oremi Akọrin keeps `AgentClient` as its single LLM boundary. The backend is
+selected at runtime; agent implementations, the orchestrator, and the public API
+do not change.
+
+- `OREMI_AKORIN_LLM_BACKEND`: Optional. Defaults to `auto`. One of:
+  - `auto` — historical behaviour: native Ollama when `OREMI_AKORIN_LLM_MODEL`
+    starts with `ollama:`, otherwise the Pydantic AI provider (OpenAI,
+    Anthropic, ...);
+  - `ollama` — force the native Ollama client;
+  - `sglang` — use an OpenAI-compatible SGLang server;
+  - `max` — use an OpenAI-compatible Modular MAX server.
+- `OREMI_AKORIN_LLM_BASE_URL`: Base URL, including the `/v1` suffix, of the
+  OpenAI-compatible server used by `sglang` and `max`. Required when
+  `OREMI_AKORIN_LLM_BACKEND` is `sglang` or `max`. Examples:
+  `http://localhost:30000/v1` (SGLang), `http://localhost:8000/v1` (MAX).
+- `OREMI_AKORIN_LLM_API_KEY`: Optional. Defaults to `EMPTY`. API key sent to
+  the OpenAI-compatible server; local servers commonly ignore it.
+
+With `sglang` or `max`, `OREMI_AKORIN_LLM_MODEL` is the served model name
+(for example `qwen2.5:3b`), not a provider-prefixed identifier. Tool calls,
+structured outputs, request timeouts, and the `SmartCache` continue to flow
+through `AgentClient`.
+
+The repository ships a reproducible benchmark, `scripts/benchmark_backends.py`,
+which measures the raw runtime (Level 1) and the full Oremi request path
+(Level 2), including TTFT, percentiles, concurrency, and errors. See
+`make benchmark`.
+
 ### LLM Behavior Settings
 
 - `OREMI_AKORIN_LLM_SYSTEM_PROMPT`: Optional. Defaults to the built-in Oremi

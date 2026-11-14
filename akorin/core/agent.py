@@ -37,6 +37,7 @@ from pydantic import Field
 from pydantic_ai import Agent
 from pydantic_ai import ModelSettings
 from pydantic_ai.capabilities import Thinking
+from pydantic_ai.models import Model
 
 from akorin.core.request import ProcessRequestContext
 from akorin.core.settings import Settings
@@ -87,7 +88,7 @@ class AgentClient(Generic[OutputModel], ABC):
     self.model_settings = self._get_model_settings()
 
     self.ollama_client: ollama.AsyncClient | None = None
-    self.model: str | None = None
+    self.model: str | Model[Any] | None = None
     self.agent: Agent[Any, OutputModel] | None = None
 
     self._initialize_clients(client)
@@ -104,9 +105,34 @@ class AgentClient(Generic[OutputModel], ABC):
       self.agent = self._create_agent()
 
   @staticmethod
-  def build_model(settings: Settings, model_settings: ModelSettings, client: httpx2.AsyncClient) -> str:
+  def build_model(settings: Settings, model_settings: ModelSettings, client: httpx2.AsyncClient) -> str | Model[Any]:
+    """Build the Pydantic AI model for the configured backend.
+
+    This is the injection seam used by tests. The native Ollama backend never
+    reaches it; the OpenAI-compatible backends return a configured model
+    instance so a single provider (and connection pool) is reused per agent.
+    """
     del model_settings, client
+
+    if settings.should_use_openai_compatible:
+      return AgentClient._build_openai_compatible_model(settings)
+
     return settings.llm_model
+
+  @staticmethod
+  def _build_openai_compatible_model(settings: Settings) -> Model[Any]:
+    """Build a Pydantic AI model backed by an OpenAI-compatible inference server."""
+    from pydantic_ai.models.openai import OpenAIChatModel
+    from pydantic_ai.profiles.openai import OpenAIModelProfile
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    provider = OpenAIProvider(base_url=settings.llm_base_url_string, api_key=settings.llm_api_key)
+
+    # Local OpenAI-compatible servers (SGLang, MAX) implement JSON-schema output
+    # more reliably than pydantic-ai's tool-based structured-output default.
+    profile = OpenAIModelProfile(default_structured_output_mode="native")
+
+    return OpenAIChatModel(settings.llm_model, provider=provider, profile=profile)
 
   def _get_model_settings(self) -> ModelSettings:
     return ModelSettings(
@@ -119,7 +145,7 @@ class AgentClient(Generic[OutputModel], ABC):
   def _create_agent(self, system_prompt: str | None = None) -> Agent[Any, OutputModel]:
     """Creates a properly typed Pydantic AI Agent."""
     return Agent(
-      model=cast(str, self.model),
+      model=cast("Model[Any] | str", self.model),
       system_prompt=system_prompt or self._get_system_prompt(),
       output_type=self.RESULT_TYPE,
       model_settings=self.model_settings,
@@ -275,7 +301,7 @@ class AgentClient(Generic[OutputModel], ABC):
     # Pydantic AI Execution
     agent_tools = [self._build_tool_function(name, tools, context, executed_tools) for name in tools.tools]
     agent = Agent(
-      model=cast(str, self.model),
+      model=cast("Model[Any] | str", self.model),
       system_prompt=sys_prompt,
       output_type=str,
       model_settings=self.model_settings,
