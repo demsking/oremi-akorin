@@ -12,7 +12,7 @@ IMAGE_PLATFORMS := linux/amd64,linux/arm64
 IMAGE_REVISION := $(shell git rev-parse HEAD)
 IMAGE_CREATED := $(shell date --utc --iso-8601=seconds)
 
-.PHONY: install tests clean package pypi image bump patch minor major alpha beta rc release publish check-clean
+.PHONY: install tests benchmark clean package pypi image bump patch minor major alpha beta rc release publish check-clean
 
 shell:
 	tmuxinator
@@ -68,6 +68,23 @@ lint:
 
 fix:
 	ruff check . --fix
+
+BENCH_BACKEND ?= ollama
+BENCH_BASE_URL ?= http://127.0.0.1:11434
+BENCH_MODEL ?= qwen2.5:3b
+BENCH_LEVELS ?= 1,2
+BENCH_WORKLOADS ?= chat,structured,tool,long_context,repeated
+BENCH_CONCURRENCY ?= 1,2,4
+
+benchmark:
+	uv run python scripts/benchmark_backends.py \
+	  --backend "$(BENCH_BACKEND)" \
+	  --base-url "$(BENCH_BASE_URL)" \
+	  --model "$(BENCH_MODEL)" \
+	  --levels "$(BENCH_LEVELS)" \
+	  --workloads "$(BENCH_WORKLOADS)" \
+	  --concurrency "$(BENCH_CONCURRENCY)" \
+	  --output "build/bench/results/$(BENCH_BACKEND).json"
 
 clean: clean-dist
 	find . -type d -name "__pycache__" -exec rm -rf {} +
