@@ -12,7 +12,7 @@ IMAGE_PLATFORMS := linux/amd64,linux/arm64
 IMAGE_REVISION := $(shell git rev-parse HEAD)
 IMAGE_CREATED := $(shell date --utc --iso-8601=seconds)
 
-.PHONY: install tests benchmark clean package pypi image bump patch minor major alpha beta rc release publish check-clean
+.PHONY: install tests benchmark benchmark-routing clean package pypi image bump patch minor major alpha beta rc release publish check-clean
 
 shell:
 	tmuxinator
@@ -75,6 +75,9 @@ BENCH_MODEL ?= qwen2.5:3b
 BENCH_LEVELS ?= 1,2
 BENCH_WORKLOADS ?= chat,structured,tool,long_context,repeated
 BENCH_CONCURRENCY ?= 1,2,4
+BENCH_ROUTING_LEVELS ?= openjev,baseline,e2e
+BENCH_ROUTING_CONCURRENCY ?= 1,2,4,8
+BENCH_ROUTING_MODEL ?= Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4
 
 benchmark:
 	uv run python scripts/benchmark_backends.py \
@@ -85,6 +88,13 @@ benchmark:
 	  --workloads "$(BENCH_WORKLOADS)" \
 	  --concurrency "$(BENCH_CONCURRENCY)" \
 	  --output "build/bench/results/$(BENCH_BACKEND).json"
+
+benchmark-routing:
+	uv run python scripts/benchmark_openjev_routing.py \
+	  --levels "$(BENCH_ROUTING_LEVELS)" \
+	  --concurrency "$(BENCH_ROUTING_CONCURRENCY)" \
+	  --model "$(BENCH_ROUTING_MODEL)" \
+	  --output "build/bench/results/openjev-routing.json"
 
 clean: clean-dist
 	find . -type d -name "__pycache__" -exec rm -rf {} +

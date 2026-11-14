@@ -587,3 +587,335 @@ models.
 | `scripts/benchmark_backends.py` | Level 1/Level 2 benchmark harness |
 | `Makefile` | `make benchmark` target |
 | `.env.example`, `DOCUMENTATION.md` | Backend configuration reference |
+
+## OpenJev + SGLang Semantic Routing Benchmark
+
+> Added after the backend benchmark above. No earlier section is modified.
+> GPU measurements were completed on 2026-09-20 while the GPU was available; the
+> results, the end-to-end route audit, and the two GPU/driver faults observed
+> during the run are documented below. The existing-router CPU baseline is kept.
+
+### Architecture
+
+Current routing (baseline A):
+
+~~~~text
+request -> SpacyRouter -> McpPromptRouter -> SemanticRouter -> CommandAgent
+        -> AgentClient -> SGLang /v1/chat/completions (native JSON-schema output)
+~~~~
+
+OpenJev is an optional specialized classifier inserted **before** the existing
+SemanticRouter and **after** the deterministic routers. It never replaces
+AgentClient and is never the general-purpose LLM backend:
+
+~~~~text
+request -> SpacyRouter -> McpPromptRouter -> OpenJevRouter
+        -> OpenJev /v1/systemone (one-token logprob choice)
+              high confidence -> RouteSemanticDecision
+              low confidence / any failure -> SemanticRouter (AgentClient -> SGLang)
+        -> AgentClient -> SGLang -> response
+~~~~
+
+Router order is asserted by `tests/test_openjev_router.py`:
+`SpacyRouter, McpPromptRouter, OpenJevRouter, SemanticRouter` (OpenJev is omitted
+when `OREMI_AKORIN_OPENJEV_URL` is unset).
+
+### OpenJev API verification (upstream)
+
+The local, open-source OpenJev (no paid TypeSafe service) was installed from
+`github.com/ekzhang/openjev-sglang` at commit
+`604664a22b2cf44c6cc499e503092ae4e3c24c03` (2026-09-18), package `openjev 0.1.0`.
+
+Verified against upstream source (`models.py`):
+
+- `POST /v1/systemone` with `state` (string or chat transcript) and `questions`.
+- `{"type": "choice", "instructions": "...", "criteria": {key: description}}`
+  with 2-64 criteria; option keys identify response fields.
+- Response `answers.<key>`: `type`, `choice` (argmax key), `probabilities`
+  (sum to 1), and `confidence` = `1 - normalized entropy`, explicitly **not**
+  calibrated correctness.
+- Internals: the question is rendered as an extra user turn; SGLang `/generate`
+  is called with `max_new_tokens=1` and `token_ids_logprob`; N+1 one-token calls
+  per N questions (one radix-cache warm-up plus one branch per question).
+- Qwen tokenizers expose the required 64 single-token answer labels; verified for
+  `Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4` with `openjev smoke` (64-way logits,
+  `target` selected, probabilities sum to 1).
+
+The repository client (`akorin/routers/openjev.py`) matches this contract and
+needed no API change. The only routing-code change is a fail-safe catch so
+**any** classifier exception degrades to the existing SemanticRouter.
+
+### Versions and configuration
+
+| Item | Value |
+| --- | --- |
+| OpenJev | 0.1.0, commit `604664a` (2026-09-18) |
+| SGLang | `lmsysorg/sglang:latest`, reports `0.5.20` (Python 3.12, torch 2.13.0+cu130) |
+| Model | `Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4`, 4-bit GPTQ |
+| GPU | NVIDIA GeForce RTX 5070, 12,227 MiB, sm_120, driver 615.71.09, CUDA UMD 13.4 |
+| OpenJev backend | SGLang on `127.0.0.1:30000`, API on `127.0.0.1:8090` |
+| SGLang flags | `--context-length 4096 --mem-fraction-static 0.65` |
+
+**Why GPTQ-Int4 and not BF16.** The pre-registered plan used
+`Qwen/Qwen2.5-3B-Instruct` in BF16. On the retagged `latest` image the KV
+profiler requires `--mem-fraction-static > 0.815` while the physical headroom
+with ~1.5 GiB of unrelated GPU consumers (`magnitude-inference` processes) caps
+the fraction below ~0.873; `0.88` then OOMs during CUDA-graph capture. GPTQ-Int4
+is the same Qwen2.5-3B-Instruct model and tokenizer at 4-bit, is the
+configuration the earlier backend benchmark found fastest, and serves both the
+OpenJev and the baseline classifier from the same server, so the routing
+comparison remains same-model. The Ollama `qwen3.5:2b` model (2.42 GB VRAM) was
+unloaded for the GPU runs; it is unrelated to this project.
+
+The served model name must equal `--model`: a request naming
+`Qwen/Qwen2.5-3B-Instruct` against a server named `...-GPTQ-Int4` returns
+`HTTP 422 {"error":{"message":"Unknown model: ..."}}`.
+
+### GPU measurements - direct classification
+
+Direct `POST /v1/systemone` (`openjev` level) versus the existing
+`SemanticRouter -> CommandAgent -> SGLang` `/v1/chat/completions` structured
+output (`baseline` level). 39 cases x 3 repeats = **117 samples** per
+concurrency, **0 errors at every point**.
+
+| c | OpenJev p50 | p95 | p99 | req/s | Baseline p50 | p95 | p99 | req/s |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 54.24 | 76.33 | 136.55 | 17.12 | 94.38 | 111.28 | 252.06 | 8.56 |
+| 2 | 99.14 | 150.92 | 191.03 | 19.65 | 136.52 | 158.61 | 528.16 | 13.75 |
+| 4 | 92.58 | 118.41 | 122.33 | 40.85 | 131.49 | 146.05 | 156.04 | 29.52 |
+| 8 | 100.39 | 142.35 | 152.35 | 71.33 | 165.76 | 287.47 | 295.43 | 45.00 |
+
+The one-token-logprob classifier is **faster and scales better** than the
+structured-output chat classification at every measured concurrency: ~1.7x
+lower p50 at c=1 and ~1.6x the throughput at c=8. That is the only category in
+which OpenJev wins, and it is not sufficient (see quality and stability).
+
+### GPU measurements - routing quality
+
+Quality is measured on the same 39 cases (accuracy over 117 samples). It is
+independent of concurrency.
+
+| Level | Accuracy | FP | FN | per-route accuracy |
+| --- | ---: | ---: | ---: | --- |
+| SemanticRouter baseline | **0.9487** | 6 | 6 | chat 1.00, isakoso 0.889, isinmi 1.00, kansa 1.00, ojo 1.00, rediyo 0.75 |
+| OpenJev | **0.7692** | 27 | 27 | chat **0.00**, isakoso 1.00, isinmi 0.889, kansa 0.667, ojo 1.00, rediyo 0.75 |
+
+OpenJev is **confidently wrong**: mean `confidence` 0.9872, p50 0.9999, min
+0.889. `confidence` is distribution concentration (`1 - normalized entropy`),
+not calibrated correctness, so it does not track accuracy.
+
+Per-case replay shows the failure is systematic, not noise: **every** chat and
+no-match case (general chat EN/FR, "Quelle heure est-il ?", joke, capital,
+explain) and `Lancer un podcast (FR)`, `ambig-rain-reminder`, `ambig-play-music`
+were misrouted, almost all to **`isakoso`** (the longest criterion description,
+which lists many command words) with `chat` probability near zero. The label bias
+makes the `choice` question unusable with this label set.
+
+Threshold sweep over OpenJev confidence (fallbacks are requests below the
+threshold that would defer to the SemanticRouter):
+
+| Threshold | Accuracy (accepted) | Fallback rate |
+| ---: | ---: | ---: |
+| 0.70 | 0.7692 | 0.0000 |
+| 0.80 | 0.7692 | 0.0000 |
+| 0.90 | 0.7895 | 0.0256 |
+| 0.95 | 0.8529 | 0.1282 |
+
+No threshold reaches the baseline, because the errors carry high confidence:
+raising the threshold only drops a few confident-wrong cases into the (correct)
+fallback while still not matching the existing router.
+
+### GPU measurements - end-to-end Oremi
+
+Full `POST /api/agent/` path (FastAPI -> Orchestrator -> routers -> AgentClient
+-> SGLang), 6 CHAT cases x 3 repeats = 18 samples per sub-run, concurrency 1.
+
+| Sub-run | p50 | p95 | p99 | req/s |
+| --- | ---: | ---: | ---: | ---: |
+| `e2e-baseline` (no OpenJev) | 457.42 | 739.21 | 759.38 | 2.452 |
+| `e2e-openjev` | 172.32 | 190.46 | 191.53 | 5.911 |
+| `e2e-baseline` (warm rerun) | 450.76 | 732.24 | 742.44 | 2.521 |
+| `e2e-openjev` (warm rerun) | 177.03 | 200.22 | 223.56 | 5.610 |
+
+The OpenJev path is ~2.5x faster end to end, but the route audit shows the speed
+is an artefact of misrouting: with the OpenJev router enabled, **5 of 6** chat
+cases returned `service=isakoso`, and the orchestrator log shows
+`ComponentUnavailable: isakoso unavailable: component is not configured` (the
+chat fallback then answered, masking the misroute as `ok=true`). If `isakoso`
+were configured, those chat requests would have issued smart-home device
+commands. With OpenJev disabled, all 6 chat cases routed to `chat` with no
+component errors. The E2E latency win is therefore not a fair comparison: it
+bypasses correct classification and takes the failed-component fallback.
+
+### Fallback behavior
+
+The classifier is fail-safe by construction and by test: timeout, connection
+failure, HTTP error, malformed response, unknown label, low confidence, or any
+unexpected exception makes `OpenJevRouter.route` return `None` and the existing
+`SemanticRouter` handles the request. Measured at c=1:
+
+| Scenario | Sub-run | p50 | p95 | p99 | req/s | errors |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Hard outage (connection refused, :8098) | `e2e-baseline` | 490.89 | 710.58 | 716.60 | 2.541 | 0 |
+| Hard outage (connection refused, :8098) | `e2e-openjev` | 347.48 | 759.22 | 780.07 | 2.644 | 0 |
+| Hung OpenJev (accepts, never responds, :8099) | `e2e-baseline` | 487.18 | 741.20 | 753.54 | 2.407 | 0 |
+| Hung OpenJev (accepts, never responds, :8099) | `e2e-openjev` | **4343.19** | 4706.43 | 4718.58 | 0.271 | 0 |
+
+A hard outage adds negligible overhead (the `e2e-baseline` sub-run always runs
+first and absorbs cold-start, so its p50 is the higher of the two). A **hung**
+OpenJev is the dangerous case: each request waits the full ~4 s
+`openjev_request_timeout` before falling back, so p50 grows ~9x (487 ms ->
+4.34 s) while the fallback still succeeds (0 errors). Unit tests cover every
+fallback path (`tests/test_openjev_router.py`, 24 tests).
+
+### Caching
+
+OpenJev results are cached in the existing `SmartCache` (key = model + labels +
+text) and failures are not cached; this is application-level caching and is
+independent of SGLang's radix prefix cache. The direct `openjev` level bypasses
+`SmartCache`, so its numbers are the raw classifier latency; the `e2e` level
+includes `SmartCache`. OpenJev exposes
+`Server-Timing`/`x-openjev-prefix-tokens`/`x-openjev-cached-tokens` for
+engine-level cache evidence; the benchmark records those headers.
+
+### VRAM and GPU contention
+
+| State | GPU memory |
+| --- | --- |
+| Idle (unrelated consumers only) | 1,557 MiB used / 10,310 MiB free |
+| SGLang GPTQ-Int4, `mem-fraction-static=0.65` (direct run) | 9,531 MiB used before, 10,231 MiB after (29% util) |
+| During E2E c=1 | 10,231 MiB used / 1,636 MiB free (44% util) |
+
+SGLang's static pool is `0.65 x 12,227 = 7,948 MiB` plus ~1.5 GiB of unrelated
+consumers, leaving ~1.6 GiB free. The OpenJev API process consumes **no GPU
+memory of its own** (its Python frontend logs "PyTorch was not found" and only
+loads the tokenizer). Concurrent SGLang load from OpenJev and from chat is
+therefore exactly the contention scenario that the end-to-end level exercises -
+and it is what crashes (below).
+
+### Stability - SGLang crash under mixed concurrency
+
+Direct OpenJev (c=1/2/4/8) and baseline (c=1/2/4/8) are stable. But when OpenJev
+`token_ids_logprob` requests and chat `/v1/chat/completions` decoding are in
+flight **together** (E2E c>=2), the SGLang 0.5.20 scheduler aborted:
+
+~~~~text
+[2026-09-20 06:58:44] Scheduler hit an exception: Traceback (most recent call last):
+  ...
+  File ".../sglang/srt/managers/scheduler_components/batch_result_processor.py", line 1113, in _normalize_decode_outputs
+    v.tolist() for v in logits_output.next_token_token_ids_logprobs_val
+AttributeError: 'list' object has no attribute 'tolist'
+~~~~
+
+The scheduler process exited and the server shut down; the E2E c=2 sub-run
+recorded 16/18 errors and the recorded VRAM after that run shows the server gone
+(1,557 MiB used). This is an SGLang bug in the per-request token-logprob path,
+triggered by colocating the OpenJev classifier and the chat model on one server.
+Retrying with `--disable-overlap-schedule` did not produce a usable matrix
+(the server died again - see below), so E2E results at c>=2 are **not measured**
+and the c=8 end-to-end comparison is unavailable.
+
+### GPU fault - bus loss recurrence
+
+During the `--disable-overlap-schedule` rerun the scheduler failed with
+
+~~~~text
+torch.AcceleratorError: CUDA error: unspecified launch failure
+~~~~
+
+and the GPU disappeared (container `nvidia-smi`: `No devices were found`), so
+that run recorded `error_rate=1.0`. This is the same class of driver/hardware
+fault first seen at 02:37 during this work:
+
+~~~~text
+Sep 20 02:37:20 NVRM: GPU0 kgmmuInvalidateTlb_GM107: TLB invalidation failed waiting for prior invalidate (status=0x0000000f)
+Sep 20 02:37:20 NVRM: GPU0 nvCheckOkFailedNoLog: Check failed: GPU lost from the bus [NV_ERR_GPU_IS_LOST]
+~~~~
+
+Recovery requires an `nvidia` module reload or a reboot (root), which this
+environment does not have. All results above were obtained **before** the second
+fault. This host's RTX 5070/driver 615.71.09 combination is therefore a
+reliability risk for any always-on GPU deployment, independent of OpenJev.
+
+### Methodology (reproducible)
+
+`scripts/benchmark_openjev_routing.py` reuses the project's own representative
+examples - `akorin.api.agent.PAYLOAD_EXAMPLES` plus the expected-route mapping
+from `tests/test_llm.py` - extended with ambiguous, no-match, short, long and
+multilingual cases (39 cases). It has three levels: `openjev` (direct
+`/v1/systemone`), `baseline` (`SemanticRouter -> CommandAgent -> LLM`) and `e2e`
+(the full `/api/agent/` path with and without the OpenJev router). It computes
+accuracy, per-route accuracy, false positives/negatives, fallback rate and
+confidence at thresholds 0.70/0.80/0.90/0.95, and writes JSON to
+`build/bench/results/` (git-ignored).
+
+~~~~sh
+# 1. SGLang GPTQ-Int4 on :30000
+docker run -d --name bench-sglang --gpus all --ipc=host -p 30000:30000 \
+  -v "$PWD/build/bench/hf:/root/.cache/huggingface" \
+  --entrypoint python lmsysorg/sglang:latest \
+  -m sglang.launch_server --model-path Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4 \
+  --host 0.0.0.0 --port 30000 --context-length 4096 --mem-fraction-static 0.65
+# 2. OpenJev against it on :8090
+cd build/bench && HF_HOME="$PWD/hf" ./openjev-venv/bin/openjev serve \
+  --connect http://127.0.0.1:30000 \
+  --model Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4 \
+  --served-model-name Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4 --host 127.0.0.1 --port 8090
+# 3. the benchmark
+uv run python scripts/benchmark_openjev_routing.py \
+  --levels openjev,baseline --concurrency 1,2,4,8 --repeats 3 \
+  --model Qwen/Qwen2.5-3B-Instruct-GPTQ-Int4 \
+  --output build/bench/results/openjev-routing-gpu-direct.json
+~~~~
+
+### Measured - existing router quality (CPU baseline)
+
+With the GPU unavailable earlier, the **functional baseline** (the existing
+`SemanticRouter -> CommandAgent`) was measured on CPU against the project's
+Ollama server (`qwen2.5:3b`, native JSON mode). This is a routing-quality
+baseline, not a latency comparison against the GPU numbers above.
+
+| Concurrency | p50 (ms) | p95 (ms) | req/s | Accuracy | FP | FN |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 1235.46 | 1603.26 | 0.77 | 0.9487 | 2 | 2 |
+| 2 | 2362.72 | 3087.35 | 0.81 | 0.9487 | 2 | 2 |
+| 4 | 4939.11 | 5940.10 | 0.77 | 0.9487 | 2 | 2 |
+
+Per-route accuracy at every concurrency: chat 1.00, isinmi 1.00, kansa 1.00,
+ojo 1.00, isakoso 0.889, rediyo 0.75. The GPU baseline reproduces the same
+accuracy (0.9487) with the same per-route profile, confirming the routing-quality
+baseline is stable across backends.
+
+### Integration decision
+
+**OpenJev is not integrated.** It stays optional and off by default (present
+only when `OREMI_AKORIN_OPENJEV_URL` is set); no production path was changed for
+this work. The benchmark shows that, with the existing label set on this model:
+
+- **Routing correctness regresses** (0.7692 vs 0.9487) and the errors are
+  confidently wrong, so no confidence threshold recovers the baseline;
+- **Colocating it with chat on one SGLang 0.5.20 server crashes the scheduler at
+  c>=2**, so even the latency/throughput advantage is not reachable in the
+  intended deployment; and
+- A hung OpenJev adds ~4 s to every request before falling back.
+
+A future attempt would need, at minimum: a corrected classification prompt/label
+design validated by a pre-registered quality run that meets or beats 0.9487;
+OpenJev pointed at its own SGLang instance (or a fixed SGLang version without the
+token-logprob batching bug); and a rerun of this exact benchmark.
+
+### Limitations
+
+- **GPU bus loss** ended the session after the direct and c=1 end-to-end
+  measurements; E2E at c=2/4/8 and the `--disable-overlap-schedule` mitigation
+  could not be measured.
+- The classifier model is **GPTQ-Int4**, not the pre-registered BF16, because
+  BF16 could not fit alongside unrelated GPU consumers on the retagged image
+  (see "Why GPTQ-Int4 and not BF16"). Baselines and OpenJev share the server.
+- The `e2e-baseline` sub-run always executes before `e2e-openjev` and absorbs
+  cold-start; the warm rerun is reported to bound that effect.
+- OpenJev `confidence` is distribution concentration, not calibrated
+  correctness; the threshold sweep is exploratory, not a calibrated operating
+  point.
+- The CPU baseline is Ollama `qwen2.5:3b`, not SGLang, so its latency is not
+  comparable with the GPU tables; only its accuracy is directly comparable.
