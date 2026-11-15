@@ -21,25 +21,25 @@ stop:
 	tmux kill-session -t $(APP_NAME)
 
 up: pull
-	docker compose up -d --remove-orphans
+	docker --context default compose up -d --remove-orphans
 
 ps:
-	docker compose ps
+	docker --context default compose ps
 
 logs:
-	docker compose logs -f
+	docker --context default compose logs -f
 
 pull:
-	docker compose pull
+	docker --context default compose pull
 
 restart:
-	docker compose restart
+	docker --context default compose restart
 
 down:
-	docker compose down
+	docker --context default compose down
 
 stats:
-	docker compose stats
+	docker --context default compose stats
 
 install:
 	rm -rf .venv
@@ -115,13 +115,13 @@ pypi: package
 	devbox run twine upload "$(DIST_DIR)"/*
 
 image:
-	@docker buildx inspect "$(BUILDER_NAME)" >/dev/null 2>&1 || \
-	  docker buildx create --name "$(BUILDER_NAME)" --bootstrap
+	@docker --context default buildx inspect "$(BUILDER_NAME)" >/dev/null 2>&1 || \
+	  docker --context default buildx create --name "$(BUILDER_NAME)" --bootstrap
 
 	@echo "Building $(IMAGE_NAME):$(APP_VERSION)"
 	devbox run uv lock --locked
-	docker buildx use "$(BUILDER_NAME)"
-	docker buildx build . \
+	docker --context default buildx use "$(BUILDER_NAME)"
+	docker --context default buildx build . \
 	  --platform "$(IMAGE_PLATFORMS)" \
 	  --push \
 	  --progress plain \
@@ -138,12 +138,12 @@ image:
 
 image-test:
 	uv lock
-	docker build . \
+	docker --context default build . \
 	  --progress plain \
 	  --tag $(IMAGE_NAME):test
 
 live: image-test
-	docker run -it --rm --env-file .env.example -v ./data:/oremi/data --network host $(IMAGE_NAME):test
+	docker --context default run -it --rm --env-file .env.example -v ./data:/oremi/data --network host $(IMAGE_NAME):test
 
 check-clean:
 	@test -z "$$(git status --porcelain)" || (echo "Working tree is not clean" && exit 1)
