@@ -439,7 +439,7 @@ with an ASGI-transport test.
 **Run the dev stack.**
 ```sh
 make shell   # tmuxinator session: make up + logs + git status
-make up      # docker compose up -d --remove-orphans
+make up      # docker --context default compose up -d --remove-orphans
 make down
 ```
 
