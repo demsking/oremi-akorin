@@ -1,5 +1,3 @@
-## Oremi Akọrin
-
 Oremi Akọrin is the natural-language gateway for the Oremi ecosystem.
 It accepts user requests over HTTP, uses a large language model (LLM)
 to understand, normalize, and classify them, then intelligently routes each
@@ -29,8 +27,8 @@ Project repository: https://gitlab.com/demsking/oremi-akorin
 
 ## Deployment
 
-Oremi Akọrin is distributed as a multi-platform Docker image for
-`linux/amd64` and `linux/arm64`. It can be deployed as a standalone service or
+The [official Docker image](https://hub.docker.com/r/demsking/oremi-akorin)
+supports `linux/amd64` and `linux/arm64`. It can be deployed as a standalone service or
 integrated into the Oremi ecosystem alongside services such as Oremi Isinmi,
 Oremi Ojọ, Oremi Rediyo, and Oremi Kansa.
 
