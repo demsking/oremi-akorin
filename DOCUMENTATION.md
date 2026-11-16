@@ -487,19 +487,25 @@ code-path overhead only and must not be mistaken for real performance.
 
 ## Docker
 
-Build the image:
+The official [`demsking/oremi-akorin`](https://hub.docker.com/r/demsking/oremi-akorin)
+image is published on Docker Hub for the following platforms:
 
-```bash
-docker build --tag oremi-akorin .
-```
+- `linux/amd64`
+- `linux/arm64`
 
-Run it with Ollama on the host:
+The image serves the API and interactive documentation on port `5020`. Docker
+automatically selects the matching platform when pulling the image. Use
+`demsking/oremi-akorin` in Docker or Docker Compose deployments; see the examples
+above.
+
+When Ollama runs on the host, configure its URL to an address reachable from the
+container:
 
 ```bash
 docker run --rm \
   --publish 5020:5020 \
   --env OREMI_AKORIN_OLLAMA_BASE_URL=http://host.docker.internal:11434 \
-  oremi-akorin
+  demsking/oremi-akorin
 ```
 
 On Linux, add `--add-host host.docker.internal:host-gateway`, use host
