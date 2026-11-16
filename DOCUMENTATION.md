@@ -405,6 +405,7 @@ The chat model can call these built-in tools:
 
 Examples include "What is `(18 * 4) + 7`?", "Convert 5 kilometers to miles",
 "What time is it in Lagos?", "List all available resources", or "Get the summarize prompt".
+
 ## OpenJev / SGLang Semantic Classifier
 
 Oremi Akọrin can use an optional, experimental **OpenJev** server backed by
@@ -440,13 +441,13 @@ outage never makes Oremi unavailable.
 
 ### Configuration
 
-| Variable | Default | Description |
-| --- | --- | --- |
-| `OREMI_AKORIN_OPENJEV_URL` | unset | Base URL of the OpenJev server. Unset disables the OpenJev router. |
-| `OREMI_AKORIN_OPENJEV_MODEL` | `jev-latest` | Model id sent to the server (its compatibility alias). |
-| `OREMI_AKORIN_OPENJEV_REQUEST_TIMEOUT` | `4.0` | Per-classification timeout before falling back. |
-| `OREMI_AKORIN_OPENJEV_CONFIDENCE_THRESHOLD` | `0.5` | Minimum confidence to accept a classification. |
-| `OREMI_AKORIN_OPENJEV_MAX_CONCURRENCY` | `16` | Maximum concurrent classification requests. |
+| Variable                                    | Default      | Description                                                        |
+| ------------------------------------------- | ------------ | ------------------------------------------------------------------ |
+| `OREMI_AKORIN_OPENJEV_URL`                  | unset        | Base URL of the OpenJev server. Unset disables the OpenJev router. |
+| `OREMI_AKORIN_OPENJEV_MODEL`                | `jev-latest` | Model id sent to the server (its compatibility alias).             |
+| `OREMI_AKORIN_OPENJEV_REQUEST_TIMEOUT`      | `4.0`        | Per-classification timeout before falling back.                    |
+| `OREMI_AKORIN_OPENJEV_CONFIDENCE_THRESHOLD` | `0.5`        | Minimum confidence to accept a classification.                     |
+| `OREMI_AKORIN_OPENJEV_MAX_CONCURRENCY`      | `16`         | Maximum concurrent classification requests.                        |
 
 The confidence score is the OpenJev-reported distribution concentration (1 minus
 normalized entropy), not a calibrated probability of correctness. The default
